@@ -1,0 +1,10 @@
+# Quran STT ONNX POC
+# Python 3.9+, CPU-only, macOS
+# Model: Saboorhsn/quran-stt-onnx (model_int8.onnx)
+
+onnxruntime==1.19.2
+sentencepiece==0.2.0
+librosa==0.10.2
+soundfile==0.12.1
+numpy==1.26.4
+huggingface_hub==0.24.7

@@ -1,0 +1,842 @@
+{
+  "version": 2,
+  "thresholds": [
+    0.7,
+    0.75,
+    0.8,
+    0.85,
+    0.9
+  ],
+  "scoring": {
+    "MATCH_EXACT": 1.0,
+    "MATCH_LIGHT": 0.9,
+    "MATCH_AGGRESSIVE": 0.75,
+    "SUBSTITUTION": 0.0,
+    "DELETION": 0.0,
+    "INSERTION": 0.0,
+    "denominator": "expected_word_count + insertions"
+  },
+  "hard_rules": {
+    "R1_score_zero": "score==0 → REJECT",
+    "R2_insertion_ratio": "ins_ratio > 0.40 → REJECT",
+    "R3_deletion_ratio": "del_ratio > 0.15 AND score < 0.85 → REJECT",
+    "R4_sub_ratio": "sub_ratio >= 0.20 AND score < 0.85 → REJECT",
+    "T1_retry_deletion": "0 < del_ratio <= 0.15 AND score >= 0.75 → RETRY"
+  },
+  "results": [
+    {
+      "name": "Yasin 001",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "يس",
+      "recognized_text": "يس",
+      "effective_score": 1.0,
+      "counts": {
+        "expected_words": 1,
+        "match_exact": 1,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=1.0000 >= threshold=0.70",
+        "0.75": "score=1.0000 >= threshold=0.75",
+        "0.8": "score=1.0000 >= threshold=0.80",
+        "0.85": "score=1.0000 >= threshold=0.85",
+        "0.9": "score=1.0000 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 002",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "recognized_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "effective_score": 1.0,
+      "counts": {
+        "expected_words": 2,
+        "match_exact": 2,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=1.0000 >= threshold=0.70",
+        "0.75": "score=1.0000 >= threshold=0.75",
+        "0.8": "score=1.0000 >= threshold=0.80",
+        "0.85": "score=1.0000 >= threshold=0.85",
+        "0.9": "score=1.0000 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 004",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "عَلَىٰ صِرَاطٍ مُّسْتَقِيمٍ",
+      "recognized_text": "عَلَى صِرَاطٍ مُسْتَقِيمٍ",
+      "effective_score": 0.9333,
+      "counts": {
+        "expected_words": 3,
+        "match_exact": 1,
+        "match_light": 2,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9333 >= threshold=0.70",
+        "0.75": "score=0.9333 >= threshold=0.75",
+        "0.8": "score=0.9333 >= threshold=0.80",
+        "0.85": "score=0.9333 >= threshold=0.85",
+        "0.9": "score=0.9333 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 011",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ الرَّحْمَٰنَ بِالْغَيْبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "recognized_text": "إِنَّمَا تُنْذِّرُ مَنِ اتَّبَعَ الذِكْرَ وَشِيَ الْأَلَ بِالْعُبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "effective_score": 0.7083,
+      "counts": {
+        "expected_words": 12,
+        "match_exact": 4,
+        "match_light": 5,
+        "match_aggressive": 0,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.25,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "sub_ratio=0.250 >= 0.20 and score=0.7083 < 0.85",
+        "0.75": "sub_ratio=0.250 >= 0.20 and score=0.7083 < 0.85",
+        "0.8": "sub_ratio=0.250 >= 0.20 and score=0.7083 < 0.85",
+        "0.85": "sub_ratio=0.250 >= 0.20 and score=0.7083 < 0.85",
+        "0.9": "sub_ratio=0.250 >= 0.20 and score=0.7083 < 0.85"
+      },
+      "expected_decision": "REVIEW"
+    },
+    {
+      "name": "Yasin 012",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ وَنَكْتُبُ مَا قَدَّمُوا وَآثَارَهُمْ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ",
+      "recognized_text": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَى وَنَكْتُبُ مَا قَدَّمُوا وَآثَارَهُمْ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُبِينٍ",
+      "effective_score": 0.9643,
+      "counts": {
+        "expected_words": 14,
+        "match_exact": 9,
+        "match_light": 5,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9643 >= threshold=0.70",
+        "0.75": "score=0.9643 >= threshold=0.75",
+        "0.8": "score=0.9643 >= threshold=0.80",
+        "0.85": "score=0.9643 >= threshold=0.85",
+        "0.9": "score=0.9643 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 020",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "وَجَاءَ مِنْ أَقْصَى الْمَدِينَةِ رَجُلٌ يَسْعَىٰ قَالَ يَا قَوْمِ اتَّبِعُوا الْمُرْسَلِينَ",
+      "recognized_text": "وَجَاءَ مِنْ أَقْصَى الْمَدِينَةِ رَجُلٌ يَسْعَى قَالَ يَا قَوْمِ اتَّبِعُوا الْمُرْسَلِينَ",
+      "effective_score": 0.9818,
+      "counts": {
+        "expected_words": 11,
+        "match_exact": 9,
+        "match_light": 2,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9818 >= threshold=0.70",
+        "0.75": "score=0.9818 >= threshold=0.75",
+        "0.8": "score=0.9818 >= threshold=0.80",
+        "0.85": "score=0.9818 >= threshold=0.85",
+        "0.9": "score=0.9818 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 036",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "سُبْحَانَ الَّذِي خَلَقَ الْأَزْوَاجَ كُلَّهَا مِمَّا تُنبِتُ الْأَرْضُ وَمِنْ أَنفُسِهِمْ وَمِمَّا لَا يَعْلَمُونَ",
+      "recognized_text": "سُبْحَانَ الَّذِي خَلَقَ الْأَزْوَاجَ كُلَّهَا مِمَّا تُمْبِتُ الْأَلدُّ وَمِنْ أَنْفُسِهِمْ وَمِمَّا لَا يَعْلَمُونَ",
+      "effective_score": 0.8077,
+      "counts": {
+        "expected_words": 13,
+        "match_exact": 6,
+        "match_light": 5,
+        "match_aggressive": 0,
+        "substitutions": 2,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.1538,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "score=0.8077 >= threshold=0.70",
+        "0.75": "score=0.8077 >= threshold=0.75",
+        "0.8": "score=0.8077 >= threshold=0.80",
+        "0.85": "score=0.8077 < threshold=0.85",
+        "0.9": "score=0.8077 < threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Yasin 058",
+      "type": "ASR_REAL",
+      "description": "Real ASR output from model",
+      "expected_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "recognized_text": "سَلَامٌ قَوْلًا مِنْ رَبٍّ رَحِيمٍ",
+      "effective_score": 0.94,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 2,
+        "match_light": 3,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9400 >= threshold=0.70",
+        "0.75": "score=0.9400 >= threshold=0.75",
+        "0.8": "score=0.9400 >= threshold=0.80",
+        "0.85": "score=0.9400 >= threshold=0.85",
+        "0.9": "score=0.9400 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Positive: exact match",
+      "type": "POSITIVE",
+      "description": "Identical text → must ACCEPT at all thresholds",
+      "expected_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "recognized_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "effective_score": 1.0,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 5,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=1.0000 >= threshold=0.70",
+        "0.75": "score=1.0000 >= threshold=0.75",
+        "0.8": "score=1.0000 >= threshold=0.80",
+        "0.85": "score=1.0000 >= threshold=0.85",
+        "0.9": "score=1.0000 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Positive: harakat stripped (light norm)",
+      "type": "POSITIVE",
+      "description": "Harakat removed → MATCH_LIGHT, should ACCEPT",
+      "expected_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "recognized_text": "والقران الحكيم",
+      "effective_score": 0.825,
+      "counts": {
+        "expected_words": 2,
+        "match_exact": 0,
+        "match_light": 1,
+        "match_aggressive": 1,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "score=0.8250 >= threshold=0.70",
+        "0.75": "score=0.8250 >= threshold=0.75",
+        "0.8": "score=0.8250 >= threshold=0.80",
+        "0.85": "score=0.8250 < threshold=0.85",
+        "0.9": "score=0.8250 < threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Positive: shadda difference",
+      "type": "POSITIVE",
+      "description": "Shadda variation — common ASR output, should ACCEPT",
+      "expected_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ",
+      "recognized_text": "إِنَّمَا تُنْذِّرُ مَنِ اتَّبَعَ الذِكْرَ",
+      "effective_score": 0.96,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 3,
+        "match_light": 2,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9600 >= threshold=0.70",
+        "0.75": "score=0.9600 >= threshold=0.75",
+        "0.8": "score=0.9600 >= threshold=0.80",
+        "0.85": "score=0.9600 >= threshold=0.85",
+        "0.9": "score=0.9600 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Positive: alef variant (aggressive norm)",
+      "type": "POSITIVE",
+      "description": "Alef variants + harakat stripped → MATCH_AGGRESSIVE, borderline ACCEPT",
+      "expected_text": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ",
+      "recognized_text": "انا نحن نحيي الموتى",
+      "effective_score": 0.8625,
+      "counts": {
+        "expected_words": 4,
+        "match_exact": 0,
+        "match_light": 3,
+        "match_aggressive": 1,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "score=0.8625 >= threshold=0.70",
+        "0.75": "score=0.8625 >= threshold=0.75",
+        "0.8": "score=0.8625 >= threshold=0.80",
+        "0.85": "score=0.8625 >= threshold=0.85",
+        "0.9": "score=0.8625 < threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Positive: tatweel present",
+      "type": "POSITIVE",
+      "description": "Tatweel (kashida) present → stripped by normalization, should ACCEPT",
+      "expected_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "recognized_text": "سَلَاـمٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "effective_score": 0.98,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 4,
+        "match_light": 1,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "ACCEPT",
+        "0.75": "ACCEPT",
+        "0.8": "ACCEPT",
+        "0.85": "ACCEPT",
+        "0.9": "ACCEPT"
+      },
+      "reasons": {
+        "0.7": "score=0.9800 >= threshold=0.70",
+        "0.75": "score=0.9800 >= threshold=0.75",
+        "0.8": "score=0.9800 >= threshold=0.80",
+        "0.85": "score=0.9800 >= threshold=0.85",
+        "0.9": "score=0.9800 >= threshold=0.90"
+      },
+      "expected_decision": "ACCEPT"
+    },
+    {
+      "name": "Negative: 1 missing word (short verse)",
+      "type": "NEGATIVE",
+      "description": "One word missing from short 5-word verse → del_ratio=0.20 > 0.15 → REJECT",
+      "expected_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "recognized_text": "سَلَامٌ قَوْلًا مِّن رَّحِيمٍ",
+      "effective_score": 0.8,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 4,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 1,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.2,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "deletion_ratio=0.200 > 0.15 and score=0.8000 < 0.85",
+        "0.75": "deletion_ratio=0.200 > 0.15 and score=0.8000 < 0.85",
+        "0.8": "deletion_ratio=0.200 > 0.15 and score=0.8000 < 0.85",
+        "0.85": "deletion_ratio=0.200 > 0.15 and score=0.8000 < 0.85",
+        "0.9": "deletion_ratio=0.200 > 0.15 and score=0.8000 < 0.85"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: 1 missing word (long verse)",
+      "type": "NEGATIVE",
+      "description": "One word missing from 12-word verse → del_ratio=0.083 <= 0.15 → RETRY",
+      "expected_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ الرَّحْمَٰنَ بِالْغَيْبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "recognized_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ بِالْغَيْبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "effective_score": 0.9167,
+      "counts": {
+        "expected_words": 12,
+        "match_exact": 11,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 1,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0833,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "RETRY",
+        "0.75": "RETRY",
+        "0.8": "RETRY",
+        "0.85": "RETRY",
+        "0.9": "RETRY"
+      },
+      "reasons": {
+        "0.7": "isolated deletion: del_ratio=0.083, score=0.9167",
+        "0.75": "isolated deletion: del_ratio=0.083, score=0.9167",
+        "0.8": "isolated deletion: del_ratio=0.083, score=0.9167",
+        "0.85": "isolated deletion: del_ratio=0.083, score=0.9167",
+        "0.9": "isolated deletion: del_ratio=0.083, score=0.9167"
+      },
+      "expected_decision": "RETRY"
+    },
+    {
+      "name": "Negative: wrong word substitution",
+      "type": "NEGATIVE",
+      "description": "One word replaced → sub_ratio=0.50 >= 0.20 → REJECT",
+      "expected_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "recognized_text": "وَالْقُرْآنِ الْعَظِيمِ",
+      "effective_score": 0.5,
+      "counts": {
+        "expected_words": 2,
+        "match_exact": 1,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.5,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "sub_ratio=0.500 >= 0.20 and score=0.5000 < 0.85",
+        "0.75": "sub_ratio=0.500 >= 0.20 and score=0.5000 < 0.85",
+        "0.8": "sub_ratio=0.500 >= 0.20 and score=0.5000 < 0.85",
+        "0.85": "sub_ratio=0.500 >= 0.20 and score=0.5000 < 0.85",
+        "0.9": "sub_ratio=0.500 >= 0.20 and score=0.5000 < 0.85"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: wrong last word",
+      "type": "NEGATIVE",
+      "description": "Last word replaced → sub_ratio=0.20 >= 0.20, score=0.80 < 0.85 → REJECT",
+      "expected_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "recognized_text": "سَلَامٌ قَوْلًا مِّن رَّبٍّ كَرِيمٍ",
+      "effective_score": 0.8,
+      "counts": {
+        "expected_words": 5,
+        "match_exact": 4,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.2,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "sub_ratio=0.200 >= 0.20 and score=0.8000 < 0.85",
+        "0.75": "sub_ratio=0.200 >= 0.20 and score=0.8000 < 0.85",
+        "0.8": "sub_ratio=0.200 >= 0.20 and score=0.8000 < 0.85",
+        "0.85": "sub_ratio=0.200 >= 0.20 and score=0.8000 < 0.85",
+        "0.9": "sub_ratio=0.200 >= 0.20 and score=0.8000 < 0.85"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: multiple missing words",
+      "type": "NEGATIVE",
+      "description": "3 words missing → del_ratio > 0.15 → REJECT",
+      "expected_text": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ وَنَكْتُبُ مَا قَدَّمُوا وَآثَارَهُمْ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ",
+      "recognized_text": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ",
+      "effective_score": 0.7143,
+      "counts": {
+        "expected_words": 14,
+        "match_exact": 10,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 4,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.2857,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "deletion_ratio=0.286 > 0.15 and score=0.7143 < 0.85",
+        "0.75": "deletion_ratio=0.286 > 0.15 and score=0.7143 < 0.85",
+        "0.8": "deletion_ratio=0.286 > 0.15 and score=0.7143 < 0.85",
+        "0.85": "deletion_ratio=0.286 > 0.15 and score=0.7143 < 0.85",
+        "0.9": "deletion_ratio=0.286 > 0.15 and score=0.7143 < 0.85"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: repeated word",
+      "type": "NEGATIVE",
+      "description": "Word repeated → ins_ratio=0.50 > 0.40 → REJECT",
+      "expected_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "recognized_text": "وَالْقُرْآنِ وَالْقُرْآنِ الْحَكِيمِ",
+      "effective_score": 0.6667,
+      "counts": {
+        "expected_words": 2,
+        "match_exact": 2,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 1
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 0.5
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "insertion_ratio=0.500 > 0.40",
+        "0.75": "insertion_ratio=0.500 > 0.40",
+        "0.8": "insertion_ratio=0.500 > 0.40",
+        "0.85": "insertion_ratio=0.500 > 0.40",
+        "0.9": "insertion_ratio=0.500 > 0.40"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: completely wrong verse",
+      "type": "NEGATIVE",
+      "description": "Completely different text → score=0 → REJECT",
+      "expected_text": "يس",
+      "recognized_text": "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+      "effective_score": 0.0,
+      "counts": {
+        "expected_words": 1,
+        "match_exact": 0,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 3
+      },
+      "ratios": {
+        "sub_ratio": 1.0,
+        "del_ratio": 0.0,
+        "ins_ratio": 3.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "score=0",
+        "0.75": "score=0",
+        "0.8": "score=0",
+        "0.85": "score=0",
+        "0.9": "score=0"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: empty transcript",
+      "type": "NEGATIVE",
+      "description": "Empty ASR output → score=0 → REJECT",
+      "expected_text": "وَالْقُرْآنِ الْحَكِيمِ",
+      "recognized_text": "",
+      "effective_score": 0.0,
+      "counts": {
+        "expected_words": 2,
+        "match_exact": 0,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 2,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 1.0,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "score=0",
+        "0.75": "score=0",
+        "0.8": "score=0",
+        "0.85": "score=0",
+        "0.9": "score=0"
+      },
+      "expected_decision": "REJECT"
+    },
+    {
+      "name": "Negative: partial (first half only)",
+      "type": "NEGATIVE",
+      "description": "Only first half recognized → score < threshold → REJECT",
+      "expected_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ الرَّحْمَٰنَ بِالْغَيْبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "recognized_text": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ",
+      "effective_score": 0.5,
+      "counts": {
+        "expected_words": 12,
+        "match_exact": 6,
+        "match_light": 0,
+        "match_aggressive": 0,
+        "substitutions": 0,
+        "deletions": 6,
+        "insertions": 0
+      },
+      "ratios": {
+        "sub_ratio": 0.0,
+        "del_ratio": 0.5,
+        "ins_ratio": 0.0
+      },
+      "decisions": {
+        "0.7": "REJECT",
+        "0.75": "REJECT",
+        "0.8": "REJECT",
+        "0.85": "REJECT",
+        "0.9": "REJECT"
+      },
+      "reasons": {
+        "0.7": "deletion_ratio=0.500 > 0.15 and score=0.5000 < 0.85",
+        "0.75": "deletion_ratio=0.500 > 0.15 and score=0.5000 < 0.85",
+        "0.8": "deletion_ratio=0.500 > 0.15 and score=0.5000 < 0.85",
+        "0.85": "deletion_ratio=0.500 > 0.15 and score=0.5000 < 0.85",
+        "0.9": "deletion_ratio=0.500 > 0.15 and score=0.5000 < 0.85"
+      },
+      "expected_decision": "REJECT"
+    }
+  ]
+}

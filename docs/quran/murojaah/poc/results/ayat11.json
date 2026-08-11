@@ -1,0 +1,9 @@
+{
+  "model": "Saboorhsn/quran-stt-onnx",
+  "model_file": "onnx/model_int8.onnx",
+  "audio": "../../poc/samples/Yasin-11.mp3",
+  "audio_duration_seconds": 18.456,
+  "inference_time_seconds": 0.272,
+  "realtime_factor": 0.0148,
+  "transcript": "إِنَّمَا تُنْذِّرُ مَنِ اتَّبَعَ الذِكْرَ وَشِيَ الْأَلَ بِالْعُبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ"
+}

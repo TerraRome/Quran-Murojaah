@@ -1,0 +1,62 @@
+{
+  "model": "Saboorhsn/quran-stt-onnx",
+  "model_file": "onnx/model_int8.onnx",
+  "results": {
+    "Yasin_001.mp3": {
+      "expected": "يس",
+      "transcript": "يس",
+      "audio_duration_seconds": 6.12,
+      "inference_time_seconds": 0.298,
+      "realtime_factor": 0.0487
+    },
+    "Yasin_002.mp3": {
+      "expected": "وَالْقُرْآنِ الْحَكِيمِ",
+      "transcript": "وَالْقُرْآنِ الْحَكِيمِ",
+      "audio_duration_seconds": 5.664,
+      "inference_time_seconds": 0.296,
+      "realtime_factor": 0.0522
+    },
+    "Yasin_004.mp3": {
+      "expected": "عَلَىٰ صِرَاطٍ مُّسْتَقِيمٍ",
+      "transcript": "عَلَى صِرَاطٍ مُسْتَقِيمٍ",
+      "audio_duration_seconds": 5.928,
+      "inference_time_seconds": 0.296,
+      "realtime_factor": 0.0499
+    },
+    "Yasin_011.mp3": {
+      "expected": "إِنَّمَا تُنذِرُ مَنِ اتَّبَعَ الذِّكْرَ وَخَشِيَ الرَّحْمَٰنَ بِالْغَيْبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "transcript": "إِنَّمَا تُنْذِّرُ مَنِ اتَّبَعَ الذِكْرَ وَشِيَ الْأَلَ بِالْعُبِ فَبَشِّرْهُ بِمَغْفِرَةٍ وَأَجْرٍ كَرِيمٍ",
+      "audio_duration_seconds": 18.456,
+      "inference_time_seconds": 0.473,
+      "realtime_factor": 0.0256
+    },
+    "Yasin_012.mp3": {
+      "expected": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَىٰ وَنَكْتُبُ مَا قَدَّمُوا وَآثَارَهُمْ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُّبِينٍ",
+      "transcript": "إِنَّا نَحْنُ نُحْيِي الْمَوْتَى وَنَكْتُبُ مَا قَدَّمُوا وَآثَارَهُمْ وَكُلَّ شَيْءٍ أَحْصَيْنَاهُ فِي إِمَامٍ مُبِينٍ",
+      "audio_duration_seconds": 18.888,
+      "inference_time_seconds": 0.445,
+      "realtime_factor": 0.0236
+    },
+    "Yasin_020.mp3": {
+      "expected": "وَجَاءَ مِنْ أَقْصَى الْمَدِينَةِ رَجُلٌ يَسْعَىٰ قَالَ يَا قَوْمِ اتَّبِعُوا الْمُرْسَلِينَ",
+      "transcript": "وَجَاءَ مِنْ أَقْصَى الْمَدِينَةِ رَجُلٌ يَسْعَى قَالَ يَا قَوْمِ اتَّبِعُوا الْمُرْسَلِينَ",
+      "audio_duration_seconds": 13.8,
+      "inference_time_seconds": 0.377,
+      "realtime_factor": 0.0273
+    },
+    "Yasin_036.mp3": {
+      "expected": "سُبْحَانَ الَّذِي خَلَقَ الْأَزْوَاجَ كُلَّهَا مِمَّا تُنبِتُ الْأَرْضُ وَمِنْ أَنفُسِهِمْ وَمِمَّا لَا يَعْلَمُونَ",
+      "transcript": "سُبْحَانَ الَّذِي خَلَقَ الْأَزْوَاجَ كُلَّهَا مِمَّا تُمْبِتُ الْأَلدُّ وَمِنْ أَنْفُسِهِمْ وَمِمَّا لَا يَعْلَمُونَ",
+      "audio_duration_seconds": 16.104,
+      "inference_time_seconds": 0.413,
+      "realtime_factor": 0.0256
+    },
+    "Yasin_058.mp3": {
+      "expected": "سَلَامٌ قَوْلًا مِّن رَّبٍّ رَّحِيمٍ",
+      "transcript": "سَلَامٌ قَوْلًا مِنْ رَبٍّ رَحِيمٍ",
+      "audio_duration_seconds": 10.104,
+      "inference_time_seconds": 0.396,
+      "realtime_factor": 0.0392
+    }
+  }
+}

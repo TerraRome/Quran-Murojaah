@@ -1,0 +1,42 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_locals
+    - avoid_dynamic_calls
+    - unawaited_futures
+    - directives_ordering
+    - prefer_const_constructors_in_immutables
+    - prefer_const_literals_to_create_immutables
+    - avoid_print
+    - avoid_empty_else
+    - avoid_redundant_argument_values
+    - avoid_shadowing_type_parameters
+    - avoid_types_as_parameter_names
+    - cancel_subscriptions
+    - close_sinks
+    - hash_and_equals
+    - prefer_single_quotes
+    - prefer_spread_collections
+    - sized_box_for_whitespace
+    - sort_child_properties_last
+    - unnecessary_late
+    - unnecessary_nullable_for_final_variable_declarations
+    - use_super_parameters
+    - use_key_in_widget_constructors
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.config.dart"
+    - "build/**"
+    - "test/**"
+
+  errors:
+    invalid_annotation_target: ignore
+    missing_return: error
+    unused_import: error
+    unused_local_variable: warning

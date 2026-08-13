@@ -10,13 +10,13 @@ library fake_murojaah_recitation_session;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_portfolio/Quran/murojaah/application/murojaah_recitation_session.dart';
-import 'package:flutter_portfolio/Quran/murojaah/application/murojaah_session_state.dart';
-import 'package:flutter_portfolio/Quran/murojaah/application/recitation_session_event.dart';
-import 'package:flutter_portfolio/Quran/murojaah/infrastructure/asr/quran_asr_result.dart';
-import 'package:flutter_portfolio/Quran/murojaah/infrastructure/audio/murojaah_audio_recorder.dart';
-import 'package:flutter_portfolio/Quran/murojaah/infrastructure/audio/murojaah_utterance_segmenter.dart';
-import 'package:flutter_portfolio/Quran/murojaah/infrastructure/asr/quran_onnx_model.dart';
+import 'package:quran/Quran/murojaah/application/murojaah_recitation_session.dart';
+import 'package:quran/Quran/murojaah/application/murojaah_session_state.dart';
+import 'package:quran/Quran/murojaah/application/recitation_session_event.dart';
+import 'package:quran/Quran/murojaah/infrastructure/asr/quran_asr_result.dart';
+import 'package:quran/Quran/murojaah/infrastructure/audio/murojaah_audio_recorder.dart';
+import 'package:quran/Quran/murojaah/infrastructure/audio/murojaah_utterance_segmenter.dart';
+import 'package:quran/Quran/murojaah/infrastructure/asr/quran_onnx_model.dart';
 
 // ---------------------------------------------------------------------------
 // Minimal no-op dependencies required by MurojaahRecitationSession constructor
@@ -146,7 +146,12 @@ class FakeMurojaahRecitationSession extends MurojaahRecitationSession {
   Future<void> start(MurojaahSessionConfig config) async {
     startCallCount++;
     lastStartConfig = config;
-    simulateState(_fakeState.copyWith(status: MurojaahSessionStatus.listening));
+    // Use idle (not listening) so the _MicButton repeating AnimationController
+    // doesn't fire in tests — pumpAndSettle would time out if we enter the
+    // listening state here. Tests that need to verify the listening UI call
+    // simulateState(MurojaahSessionState(status: MurojaahSessionStatus.listening))
+    // explicitly.
+    simulateState(_fakeState.copyWith(status: MurojaahSessionStatus.idle));
   }
 
   @override

@@ -17,13 +17,15 @@ import '../../application/murojaah_recitation_session.dart';
 import '../../application/verse_speaker.dart';
 import '../widgets/murojaah_mushaf.dart';
 
-/// Halaman renderer mushaf Murojaah (Milestone 2-5).
+/// Teks Bismillah standar yang ditampilkan di header surah.
+/// Surah At-Taubah (9) tidak diawali Bismillah.
+const _kBismillah = 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ';
+
+/// Halaman renderer mushaf Murojaah (E7 UI/UX redesign).
 ///
-/// Alur: user menekan **Mulai Murojaah** (semua ayat tersembunyi, ayat aktif
-/// 1). Tombol **Bicara** mengaktifkan speech recognition; transkrip final
-/// divalidasi otomatis terhadap ayat aktif (Matching Engine). Benar → ayat
-/// ter-reveal & maju. Salah ke-3 pada ayat yang sama → TTS membacakan ayat
-/// yang benar; user tetap di ayat tersebut dan boleh mencoba lagi.
+/// Layout: surah identity header → Quran verses → circular mic primary action.
+/// Microphone adalah primary action. Ayat adalah konten utama.
+/// User "menyetorkan hafalan", bukan mengoperasikan voice recorder.
 class MushafRendererPage extends StatefulWidget {
   const MushafRendererPage({
     super.key,
@@ -170,88 +172,81 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
     // Transcript is stored in session state before the event is emitted.
     final transcript =
         _recitationSession.state.lastAsrResult?.transcript ?? '';
-    if (transcript.isEmpty) return;
-
     final verse = surah.verses[active - 1];
-    final correct = _murojaah.validateWithMatcher(
+
+    final accepted = _murojaah.validateWithMatcher(
       transcript: transcript,
       expectedArabic: verse.displayArabic(surah.number),
       surahNumber: surah.number,
       totalVerses: surah.verses.length,
     );
 
-    if (correct) {
-      // ACCEPT path: arm the auto-advance flag. The session will emit
-      // SessionStopped after its internal _tearDown(); _onSessionEvent
-      // will then start the 800 ms timer.
+    if (accepted) {
+      // E6: flag pending auto-advance; timer armed in SessionStopped handler.
       _pendingAutoAdvance = true;
-    } else if (_murojaah.shouldTriggerHelp) {
-      final tts = _ttsText(verse);
-      if (tts.isNotEmpty) _speaker.speak(tts);
+    } else {
+      // REJECT: trigger TTS help after helpThreshold consecutive misses.
+      if (_murojaah.shouldTriggerHelp) {
+        final verse = surah.verses[active - 1];
+        _speaker.speak(_ttsText(verse));
+      }
     }
   }
 
-  /// Called when the 800 ms auto-advance timer fires after an ACCEPT.
-  ///
-  /// Guards: widget must still be mounted, murojaah must still be running
-  /// (not completed / stopped), and the active verse must still be set.
-  /// If TTS is speaking we set [_ttsBlockedAutoRestart] and defer —
-  /// [_onSpeakerChanged] will call [_startRecitationSession] when TTS finishes.
+  /// E6: Called when the 800 ms delay has elapsed after ACCEPT.
+  /// Restarts the session for the next verse unless TTS is speaking.
   void _onAutoAdvanceTimer() {
-    _autoAdvanceTimer = null;
     if (!mounted) return;
     if (_murojaah.value.phase != MurojaahPhase.running) return;
-    if (_murojaah.value.activeVerse == null) return;
     if (_speaker.value == VerseSpeakerStatus.speaking) {
-      // TTS is playing — defer restart until TTS finishes.
+      // TTS is still reading — defer restart until TTS finishes.
       _ttsBlockedAutoRestart = true;
       return;
     }
     _startRecitationSession();
   }
 
-  /// When TTS starts speaking, stop the ASR session to avoid mic/speaker
-  /// conflict.
-  ///
-  /// When TTS finishes and [_ttsBlockedAutoRestart] is set (the 800 ms timer
-  /// fired while TTS was playing), immediately start the next session.
+  /// Called when the TTS speaker state changes.
+  /// If a deferred auto-restart is pending and TTS just finished, restart now.
   void _onSpeakerChanged() {
+    if (!mounted) return;
+
+    // If TTS blocked the auto-restart and just finished, start the session.
+    if (_ttsBlockedAutoRestart &&
+        _speaker.value != VerseSpeakerStatus.speaking) {
+      _ttsBlockedAutoRestart = false;
+      _startRecitationSession();
+      return;
+    }
+
+    // If TTS just started (help), stop the active session to release mic.
     if (_speaker.value == VerseSpeakerStatus.speaking) {
-      // TTS starting: stop mic to avoid feedback.
       _recitationSession.stop();
-    } else {
-      // TTS finished: resume a deferred auto-restart if one is pending.
-      if (!mounted) return;
-      if (_ttsBlockedAutoRestart) {
-        _ttsBlockedAutoRestart = false;
-        if (_murojaah.value.phase == MurojaahPhase.running &&
-            _murojaah.value.activeVerse != null) {
-          _startRecitationSession();
-        }
-      }
     }
   }
 
+  /// Called on every [MurojaahController] state change.
+  /// Stops the session when murojaah completes all verses.
   void _onMurojaahChanged() {
+    if (!mounted) return;
     if (_murojaah.value.phase == MurojaahPhase.completed) {
       _cancelAutoAdvance();
       _recitationSession.stop();
     }
+    setState(() {});
   }
 
-  /// Dipanggil tombol "Selesai" — validasi akumulasi transkrip saat ini.
-  /// Benar → reveal & maju. Salah → feedback incorrect, akumulasi direset
-  /// agar user bisa mulai rekam ulang dari awal untuk ayat yang sama.
+  /// Validate the accumulated transcript for the active verse (long-verse
+  /// manual submit path). Called from the long-verse "Selesai" action.
   void _submitAccumulated() {
-    _cancelAutoAdvance();
-    final state = _murojaah.value;
+    if (!_murojaah.value.isRunning) return;
     final surah = _surah;
-    final active = state.activeVerse;
-    if (!state.isRunning || active == null || surah == null) return;
-    if (!_murojaah.hasAccumulated) return;
+    if (surah == null) return;
+    final active = _murojaah.value.activeVerse;
+    if (active == null) return;
 
     final verse = surah.verses[active - 1];
-    final correct = _murojaah.validate(
+    final accepted = _murojaah.validate(
       transcript: _murojaah.accumulatedTranscript,
       expectedArabic: verse.displayArabic(surah.number),
       verseNormalized: verse.normalizedText,
@@ -259,13 +254,12 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
       totalVerses: surah.verses.length,
     );
 
-    if (!correct) {
-      // Reset akumulasi agar user mulai bersih di rekaman berikutnya
-      _murojaah.clearAccumulated();
-      if (_murojaah.shouldTriggerHelp) {
-        final tts = _ttsText(verse);
-        if (tts.isNotEmpty) _speaker.speak(tts);
-      }
+    if (accepted) {
+      _pendingAutoAdvance = true;
+      _recitationSession.stop();
+    } else if (_murojaah.shouldTriggerHelp) {
+      final verse = surah.verses[active - 1];
+      _speaker.speak(_ttsText(verse));
     }
   }
 
@@ -283,8 +277,8 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
   }
 
   /// Start the recitation session for the current active verse.
-  /// Called when "Bicara" is tapped while the session is idle, or when
-  /// "Mulai Murojaah" / "Ulang" starts a fresh run.
+  /// Called when "Mulai Murojaah" / "Ulang" starts a fresh run, or when
+  /// E6 auto-advance timer fires.
   Future<void> _startRecitationSession() async {
     final surah = _surah;
     if (surah == null) return;
@@ -353,23 +347,17 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
     }
     return Column(
       children: [
-        const SizedBox(height: 12),
-        QuranTopBar(
-          title: surah.transliteration,
-          titleColor: QuranTokens.brandColor(dark),
-          leading: IconButton(
-            onPressed: () => context.pop(),
-            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-            color: QuranTokens.inkColor(dark),
-          ),
+        const SizedBox(height: 4),
+        // Back button row — minimal, tidak mengambil ruang
+        _TopBar(
+          surah: surah,
+          dark: dark,
+          onBack: () => context.pop(),
           onThemeToggle: () => QuranThemeScope.toggleDark(context),
         ),
-        ValueListenableBuilder<MurojaahState>(
-          valueListenable: _murojaah,
-          builder: (context, state, _) {
-            return _ProgressHeader(state: state, dark: dark);
-          },
-        ),
+        // Surah identity header: nama + bismillah
+        _SurahHeader(surah: surah, dark: dark),
+        // Quran text — dominant area
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
@@ -380,22 +368,25 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
             ),
           ),
         ),
+        // Bottom controls: mic primary + secondary flanking
         ValueListenableBuilder<MurojaahState>(
           valueListenable: _murojaah,
           builder: (context, state, _) {
             final active = state.activeVerse;
-            final activeVerseTts = (active != null && active <= surah.verses.length)
-                ? _ttsText(surah.verses[active - 1])
-                : null;
-            final isLongVerse = active != null && active <= surah.verses.length
-                ? MurojaahController.isLongVerse(
-                    surah.verses[active - 1]
-                        .displayArabic(surah.number)
-                        .trim()
-                        .split(RegExp(r'\s+'))
-                        .where((w) => w.isNotEmpty)
-                        .length)
-                : false;
+            final activeVerseTts =
+                (active != null && active <= surah.verses.length)
+                    ? _ttsText(surah.verses[active - 1])
+                    : null;
+            final isLongVerse =
+                active != null && active <= surah.verses.length
+                    ? MurojaahController.isLongVerse(
+                        surah.verses[active - 1]
+                            .displayArabic(surah.number)
+                            .trim()
+                            .split(RegExp(r'\s+'))
+                            .where((w) => w.isNotEmpty)
+                            .length)
+                    : false;
             return _BottomControls(
               state: state,
               controller: _murojaah,
@@ -417,259 +408,198 @@ class _MushafRendererPageState extends State<MushafRendererPage> {
   }
 }
 
-/// Bilah progress (Milestone 3): ayat aktif + progress reveal.
-class _ProgressHeader extends StatelessWidget {
-  const _ProgressHeader({required this.state, required this.dark});
+// ─────────────────────────────────────────────────────────────────────────────
+// _TopBar — minimal back + theme toggle, tidak mengambil terlalu banyak ruang
+// ─────────────────────────────────────────────────────────────────────────────
 
-  final MurojaahState state;
+class _TopBar extends StatelessWidget {
+  const _TopBar({
+    required this.surah,
+    required this.dark,
+    required this.onBack,
+    required this.onThemeToggle,
+  });
+
+  final Surah surah;
   final bool dark;
+  final VoidCallback onBack;
+  final VoidCallback onThemeToggle;
 
   @override
   Widget build(BuildContext context) {
-    final total = state.totalVerses ?? 0;
-    final active = state.activeVerse;
-
-    final Widget content;
-    if (state.phase == MurojaahPhase.initial) {
-      content = Row(
-        children: [
-          Icon(Icons.lock_outline,
-              size: 18, color: QuranTokens.secondaryColor(dark)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Semua ayat tersembunyi — tekan Mulai Murojaah.',
-              style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                  .copyWith(color: QuranTokens.inkColor(dark)),
-            ),
-          ),
-        ],
-      );
-    } else {
-      final value = total == 0 ? 0.0 : (state.revealedVerses / total).clamp(0.0, 1.0);
-      final isDone = state.phase == MurojaahPhase.completed;
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isDone ? 'Selesai' : 'Ayat ${active ?? total} / $total',
-                style: QuranTokens.poppins(QuranTokens.tsSurahName)
-                    .copyWith(color: QuranTokens.inkColor(dark)),
-              ),
-              Text(
-                '${state.revealedVerses} / $total',
-                style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                    .copyWith(color: QuranTokens.secondaryColor(dark)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: value,
-              minHeight: 4,
-              backgroundColor: QuranTokens.divider(dark),
-              color: isDone
-                  ? QuranTokens.secondaryColor(dark)
-                  : QuranTokens.brandColor(dark),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: QuranTokens.surface(dark),
-        borderRadius: BorderRadius.circular(12),
+    return QuranTopBar(
+      title: surah.transliteration,
+      titleColor: QuranTokens.brandColor(dark),
+      leading: IconButton(
+        onPressed: onBack,
+        icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+        color: QuranTokens.inkColor(dark),
       ),
-      child: content,
+      onThemeToggle: onThemeToggle,
     );
   }
 }
 
-/// Panel status & feedback validasi.
-///
-/// Menampilkan status sesi ASR dan akumulasi transkrip untuk ayat panjang.
-class _SpeechPanel extends StatelessWidget {
-  const _SpeechPanel({
+// ─────────────────────────────────────────────────────────────────────────────
+// _SurahHeader — Ornamental header: nama latin + bismillah (E7)
+// Menggantikan _ProgressHeader yang menampilkan "Ayat X/Y" dan progress bar.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SurahHeader extends StatelessWidget {
+  const _SurahHeader({required this.surah, required this.dark});
+
+  final Surah surah;
+  final bool dark;
+
+  /// Surah At-Taubah (9) tidak diawali Bismillah.
+  bool get _showBismillah => surah.number != 9;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
+      child: Column(
+        children: [
+          if (_showBismillah)
+            Text(
+              _kBismillah,
+              textAlign: TextAlign.center,
+              textDirection: TextDirection.rtl,
+              style: QuranTokens.amiri(
+                TextStyle(
+                  fontSize: 16,
+                  color: QuranTokens.secondaryColor(dark),
+                  height: 1.8,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _FeedbackChip — subtle feedback overlay, tidak menggeser layout
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FeedbackChip extends StatelessWidget {
+  const _FeedbackChip({
     required this.state,
     required this.dark,
-    this.accumulatedTranscript = '',
-    this.sessionStatus,
+    required this.sessionStatus,
   });
 
   final MurojaahState state;
   final bool dark;
-
-  /// Akumulasi transkrip dari semua potongan rekaman pada ayat aktif.
-  final String accumulatedTranscript;
-
-  /// Status dari [MurojaahRecitationSession].
   final MurojaahSessionStatus? sessionStatus;
 
   @override
   Widget build(BuildContext context) {
-    // Legacy matcher result takes priority when present.
     final matchResult = state.matchResult;
-    // New-engine decision (murojaahDecision) checked when legacy matchResult is absent.
     final decision = state.murojaahDecision;
 
-    final (icon, label, labelColor) = switch (matchResult) {
-      MatchResult.accept => (
-          Icons.check_circle,
-          'Benar!',
-          QuranTokens.brandColor(dark),
-        ),
+    // Resolve feedback label + color
+    final (String label, Color color, IconData icon) = switch (matchResult) {
+      MatchResult.accept => ('Benar!', QuranTokens.brandColor(dark), Icons.check_circle_outline),
       MatchResult.almost => (
-          Icons.refresh,
-          'Hampir tepat. Coba lagi.',
+          'Hampir tepat.',
           Colors.amber.shade700,
+          Icons.refresh,
         ),
       MatchResult.reject => (
-          Icons.refresh,
-          'Belum tepat. Coba lagi.',
+          'Belum tepat.',
           QuranTokens.secondaryColor(dark),
+          Icons.refresh,
         ),
       null => switch (decision) {
           MurojaahDecision.accept => (
-              Icons.check_circle,
               'Benar!',
               QuranTokens.brandColor(dark),
+              Icons.check_circle_outline,
             ),
           MurojaahDecision.retry || MurojaahDecision.reject => (
-              Icons.refresh,
-              'Belum tepat. Coba lagi.',
+              'Belum tepat.',
               QuranTokens.secondaryColor(dark),
+              Icons.refresh,
             ),
-          null => _sessionStatusLabel(dark),
+          null => _fromSessionStatus(),
         },
     };
-    return _buildPanel(context, icon, label, labelColor);
-  }
 
-  /// Map [MurojaahSessionStatus] to (icon, label, color).
-  (IconData, String, Color) _sessionStatusLabel(bool dark) {
-    final ss = sessionStatus;
-    if (ss != null) {
-      return switch (ss) {
-        MurojaahSessionStatus.idle => (
-            Icons.mic_none,
-            'Tekan Bicara lalu bacakan ayat aktif.',
-            QuranTokens.inkColor(dark),
-          ),
-        MurojaahSessionStatus.initializing => (
-            Icons.settings_input_antenna,
-            'Menyiapkan mikrofon…',
-            QuranTokens.inkColor(dark),
-          ),
-        MurojaahSessionStatus.listening => (
-            Icons.graphic_eq,
-            'Mendengarkan…',
-            QuranTokens.inkColor(dark),
-          ),
-        MurojaahSessionStatus.processing => (
-            Icons.hourglass_top,
-            'Memproses rekaman…',
-            QuranTokens.inkColor(dark),
-          ),
-        MurojaahSessionStatus.result => (
-            Icons.check_circle_outline,
-            'Hasil diterima.',
-            QuranTokens.inkColor(dark),
-          ),
-        MurojaahSessionStatus.permissionDenied => (
-            Icons.mic_off,
-            'Izin mikrofon ditolak.',
-            QuranTokens.secondaryColor(dark),
-          ),
-        MurojaahSessionStatus.error => (
-            Icons.error_outline,
-            'Terjadi kesalahan. Coba lagi.',
-            QuranTokens.secondaryColor(dark),
-          ),
-      };
-    }
-    return (
-      Icons.mic_none,
-      'Tekan Bicara lalu bacakan ayat aktif.',
-      QuranTokens.inkColor(dark),
-    );
-  }
+    // When there is no actionable feedback and no active status, hide.
+    if (label.isEmpty) return const SizedBox.shrink();
 
-  Widget _buildPanel(
-      BuildContext context, IconData icon, String label, Color labelColor) {
-    final matchResult = state.matchResult;
-    final noFeedback = matchResult == null;
-    final showAccumulated = noFeedback &&
-        accumulatedTranscript.trim().isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: QuranTokens.verseBg(dark),
-        borderRadius: BorderRadius.circular(10),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: labelColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                      .copyWith(color: labelColor),
-                ),
-                // Akumulasi transkrip multi-rekam untuk ayat panjang
-                if (showAccumulated) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.layers,
-                        size: 12,
-                        color: QuranTokens.secondaryColor(dark),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          accumulatedTranscript,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                                  .copyWith(
-                            color: QuranTokens.secondaryColor(dark),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: QuranTokens.poppins(
+              TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  (String, Color, IconData) _fromSessionStatus() {
+    final ss = sessionStatus;
+    if (ss == null) return ('', QuranTokens.inkColor(dark), Icons.mic_none);
+    return switch (ss) {
+      MurojaahSessionStatus.idle => (
+          '',
+          QuranTokens.inkColor(dark),
+          Icons.mic_none,
+        ),
+      MurojaahSessionStatus.initializing => (
+          'Menyiapkan mikrofon…',
+          QuranTokens.inkColor(dark),
+          Icons.settings_input_antenna,
+        ),
+      MurojaahSessionStatus.listening => (
+          'Mendengarkan…',
+          QuranTokens.brandColor(dark),
+          Icons.graphic_eq,
+        ),
+      MurojaahSessionStatus.processing => (
+          'Memproses…',
+          QuranTokens.secondaryColor(dark),
+          Icons.hourglass_top,
+        ),
+      MurojaahSessionStatus.result => (
+          '',
+          QuranTokens.inkColor(dark),
+          Icons.mic_none,
+        ),
+      MurojaahSessionStatus.error => (
+          'Terjadi kesalahan. Coba lagi.',
+          Colors.red.shade400,
+          Icons.error_outline,
+        ),
+      MurojaahSessionStatus.permissionDenied => (
+          'Izin mikrofon ditolak.',
+          Colors.red.shade400,
+          Icons.mic_off,
+        ),
+    };
+  }
 }
 
-/// Panel bantuan bacaan (M5+): tampil saat TTS membacakan ayat yang benar
-/// setelah user 3 kali salah beruntun.
+// ─────────────────────────────────────────────────────────────────────────────
+// _HelpPanel — TTS sedang membacakan ayat yang benar
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _HelpPanel extends StatelessWidget {
   const _HelpPanel({required this.speaker, required this.dark});
 
@@ -684,30 +614,32 @@ class _HelpPanel extends StatelessWidget {
         if (status != VerseSpeakerStatus.speaking) {
           return const SizedBox.shrink();
         }
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: QuranTokens.verseBg(dark),
-            borderRadius: BorderRadius.circular(10),
-          ),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.volume_up, size: 18, color: QuranTokens.brandColor(dark)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Membacakan bacaan yang benar…',
-                  style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                      .copyWith(color: QuranTokens.inkColor(dark)),
+              Icon(Icons.volume_up, size: 14, color: QuranTokens.brandColor(dark)),
+              const SizedBox(width: 4),
+              Text(
+                'Membacakan bacaan yang benar…',
+                style: QuranTokens.poppins(
+                  TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: QuranTokens.inkColor(dark),
+                  ),
                 ),
               ),
-              IconButton(
-                onPressed: speaker.stop,
-                icon: Icon(Icons.stop_circle,
-                    size: 20, color: QuranTokens.secondaryColor(dark)),
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: speaker.stop,
+                child: Icon(
+                  Icons.stop_circle,
+                  size: 14,
+                  color: QuranTokens.secondaryColor(dark),
+                ),
               ),
             ],
           ),
@@ -717,7 +649,140 @@ class _HelpPanel extends StatelessWidget {
   }
 }
 
-/// Kontrol bawah: tombol Bicara/Berhenti + Dengar + Selesai + Ulang + bantuan bacaan TTS.
+// ─────────────────────────────────────────────────────────────────────────────
+// _MicButton — circular primary mic button dengan pulse state saat listening
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MicButton extends StatefulWidget {
+  const _MicButton({
+    required this.sessionStatus,
+    required this.dark,
+    required this.onTap,
+  });
+
+  final MurojaahSessionStatus sessionStatus;
+  final bool dark;
+  final VoidCallback onTap;
+
+  @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 1.12).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+    _updateAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_MicButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionStatus != widget.sessionStatus) {
+      _updateAnimation();
+    }
+  }
+
+  void _updateAnimation() {
+    if (widget.sessionStatus == MurojaahSessionStatus.listening) {
+      _pulse.repeat(reverse: true);
+    } else {
+      _pulse.stop();
+      _pulse.value = 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final listening = widget.sessionStatus == MurojaahSessionStatus.listening;
+    final processing = widget.sessionStatus == MurojaahSessionStatus.processing ||
+        widget.sessionStatus == MurojaahSessionStatus.initializing;
+
+    final brandColor = QuranTokens.brandColor(widget.dark);
+
+    return Semantics(
+      label: listening ? 'Berhenti merekam' : 'Mulai merekam',
+      button: true,
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: listening ? _scale.value : 1.0,
+            child: child,
+          );
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: listening
+                  ? brandColor
+                  : processing
+                      ? brandColor.withValues(alpha: 0.6)
+                      : brandColor,
+              boxShadow: [
+                BoxShadow(
+                  color: brandColor.withValues(alpha: listening ? 0.4 : 0.2),
+                  blurRadius: listening ? 20 : 10,
+                  spreadRadius: listening ? 4 : 1,
+                ),
+              ],
+            ),
+            child: Center(
+              child: processing
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    )
+                  : Icon(
+                      listening ? Icons.mic : Icons.mic_none,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _BottomControls — E7 redesign
+//
+// Layout:
+//   [feedback chip + help panel]
+//   [Ulang]   [🎙 Mic]   [Dengar]
+//
+// initial phase  → "Mulai Murojaah" full-width CTA
+// running phase  → circular mic + flanking secondary buttons
+// completed phase → clean completion state
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _BottomControls extends StatelessWidget {
   const _BottomControls({
     required this.state,
@@ -741,26 +806,22 @@ class _BottomControls extends StatelessWidget {
   final int totalVerses;
   final bool dark;
 
-  /// Callback saat tombol "Selesai" ditekan — validasi akumulasi transkrip.
+  /// Callback saat tombol "Selesai" ditekan untuk ayat panjang.
   final VoidCallback onSubmit;
 
-  /// Teks transliterasi Latin ayat aktif untuk diputar TTS saat tombol "Dengar"
-  /// ditekan. Null bila tidak ada ayat aktif atau transliteration belum tersedia.
+  /// Teks TTS ayat aktif. Null bila tidak tersedia.
   final String? activeVerseTts;
 
   /// True bila ayat aktif termasuk ayat panjang (≥ longVerseWordThreshold kata).
-  /// Hanya ayat panjang yang menampilkan tombol "Selesai" (multi-rekam).
   final bool isLongVerse;
 
-  /// ASR session — owned by MurojaahPageShell, always non-null.
+  /// ASR session — owned by MurojaahPageShell.
   final MurojaahRecitationSession recitationSession;
 
-  /// Start the recitation session for the current active verse.
   final Future<void> Function()? onStartSession;
-
-  /// Stop the recitation session.
   final Future<void> Function()? onStopSession;
 
+  /// Restart murojaah dari awal.
   void _start() {
     speaker.stop();
     controller.start(surahNumber: surahNumber, totalVerses: totalVerses);
@@ -776,7 +837,6 @@ class _BottomControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final running = state.phase == MurojaahPhase.running;
     return ListenableBuilder(
       listenable: recitationSession,
       builder: (context, _) {
@@ -788,141 +848,248 @@ class _BottomControls extends StatelessWidget {
         return SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (running)
-                  _SpeechPanel(
-                    state: state,
-                    dark: dark,
-                    accumulatedTranscript: controller.accumulatedTranscript,
-                    sessionStatus: sessionStatus,
-                  ),
-                if (running) _HelpPanel(speaker: speaker, dark: dark),
-                switch (state.phase) {
-                  MurojaahPhase.initial => FilledButton.icon(
-                      onPressed: _start,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Mulai Murojaah'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: QuranTokens.brandColor(dark),
-                      ),
-                    ),
-                  MurojaahPhase.running => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Tombol Bicara / Berhenti
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: busy
-                                ? () => onStopSession?.call()
-                                : () {
-                                    controller.clearFeedback();
-                                    speaker.stop();
-                                    onStartSession?.call();
-                                  },
-                            icon: Icon(busy ? Icons.mic_off : Icons.mic),
-                            label: Text(busy ? 'Berhenti' : 'Bicara'),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              backgroundColor: QuranTokens.brandColor(dark),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Tombol Dengar — putar TTS bacaan ayat aktif
-                        ValueListenableBuilder<VerseSpeakerStatus>(
-                          valueListenable: speaker,
-                          builder: (context, speakerStatus, _) {
-                            final isSpeaking =
-                                speakerStatus == VerseSpeakerStatus.speaking;
-                            return OutlinedButton.icon(
-                              onPressed: isSpeaking
-                                  ? speaker.stop
-                                  : (activeVerseTts != null && activeVerseTts!.isNotEmpty
-                                      ? _listenCorrect
-                                      : null),
-                              icon: Icon(
-                                isSpeaking ? Icons.stop : Icons.volume_up,
-                              ),
-                              label: Text(isSpeaking ? 'Stop' : 'Dengar'),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size.fromHeight(48),
-                                foregroundColor: QuranTokens.brandColor(dark),
-                                side: BorderSide(
-                                  color: isSpeaking
-                                      ? QuranTokens.brandColor(dark)
-                                      : QuranTokens.divider(dark),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        // Tombol Selesai — hanya untuk ayat panjang (multi-rekam)
-                        if (isLongVerse) ...[
-                          const SizedBox(height: 8),
-                          ValueListenableBuilder<String>(
-                            valueListenable: _AccumulatedNotifier(controller),
-                            builder: (context, accumulated, _) {
-                              final hasAccumulated =
-                                  accumulated.trim().isNotEmpty;
-                              return FilledButton.icon(
-                                onPressed: hasAccumulated && !busy
-                                    ? onSubmit
-                                    : null,
-                                icon: const Icon(Icons.done_all),
-                                label: const Text('Selesai'),
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(48),
-                                  backgroundColor: hasAccumulated && !busy
-                                      ? QuranTokens.brandColor(dark)
-                                          .withValues(alpha: 0.85)
-                                      : QuranTokens.divider(dark),
-                                  foregroundColor: hasAccumulated && !busy
-                                      ? Colors.white
-                                      : QuranTokens.secondaryColor(dark),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: _start,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Ulang'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            foregroundColor: QuranTokens.secondaryColor(dark),
-                            side: BorderSide(color: QuranTokens.divider(dark)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  MurojaahPhase.completed => FilledButton.icon(
-                      onPressed: _start,
-                      icon: const Icon(Icons.replay),
-                      label: const Text('Mulai Ulang'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: QuranTokens.brandColor(dark),
-                      ),
-                    ),
-                },
-              ],
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: switch (state.phase) {
+              // ── Initial: single full-width CTA ──────────────────────────────
+              MurojaahPhase.initial => _buildInitialPhase(),
+
+              // ── Running: circular mic + flanking secondary ───────────────────
+              MurojaahPhase.running => _buildRunningPhase(
+                  sessionStatus: sessionStatus,
+                  busy: busy,
+                  context: context,
+                ),
+
+              // ── Completed: clean completion state ────────────────────────────
+              MurojaahPhase.completed => _buildCompletedPhase(),
+            },
           ),
         );
       },
     );
   }
+
+  Widget _buildInitialPhase() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FilledButton.icon(
+          onPressed: _start,
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Mulai Murojaah'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            backgroundColor: QuranTokens.brandColor(dark),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRunningPhase({
+    required MurojaahSessionStatus sessionStatus,
+    required bool busy,
+    required BuildContext context,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Subtle feedback chip (Benar! / Belum tepat. / status)
+        _FeedbackChip(
+          state: state,
+          dark: dark,
+          sessionStatus: sessionStatus,
+        ),
+        // TTS help notification
+        _HelpPanel(speaker: speaker, dark: dark),
+        // Main controls row: [Ulang] [🎙] [Dengar]
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ── Ulang (secondary left) ──────────────────────────────────────
+            _SecondaryButton(
+              icon: Icons.refresh,
+              label: 'Ulang',
+              dark: dark,
+              onTap: _start,
+            ),
+            const SizedBox(width: 24),
+            // ── Microphone (primary center) ─────────────────────────────────
+            _MicButton(
+              sessionStatus: sessionStatus,
+              dark: dark,
+              onTap: busy
+                  ? () => onStopSession?.call()
+                  : () {
+                      controller.clearFeedback();
+                      speaker.stop();
+                      onStartSession?.call();
+                    },
+            ),
+            const SizedBox(width: 24),
+            // ── Dengar (secondary right) ────────────────────────────────────
+            ValueListenableBuilder<VerseSpeakerStatus>(
+              valueListenable: speaker,
+              builder: (context, speakerStatus, _) {
+                final isSpeaking = speakerStatus == VerseSpeakerStatus.speaking;
+                return _SecondaryButton(
+                  icon: isSpeaking ? Icons.stop : Icons.volume_up,
+                  label: isSpeaking ? 'Stop' : 'Dengar',
+                  dark: dark,
+                  onTap: isSpeaking
+                      ? speaker.stop
+                      : (activeVerseTts != null && activeVerseTts!.isNotEmpty
+                          ? _listenCorrect
+                          : null),
+                  active: isSpeaking,
+                );
+              },
+            ),
+          ],
+        ),
+        // Long-verse Selesai — small, non-intrusive, only when has accumulated
+        if (isLongVerse)
+          ValueListenableBuilder<String>(
+            valueListenable: _AccumulatedNotifier(controller),
+            builder: (context, accumulated, _) {
+              final hasAccumulated = accumulated.trim().isNotEmpty;
+              if (!hasAccumulated) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: TextButton.icon(
+                  onPressed: busy ? null : onSubmit,
+                  icon: Icon(
+                    Icons.done_all,
+                    size: 16,
+                    color: busy
+                        ? QuranTokens.secondaryColor(dark)
+                        : QuranTokens.brandColor(dark),
+                  ),
+                  label: Text(
+                    'Selesai rekam',
+                    style: QuranTokens.poppins(
+                      TextStyle(
+                        fontSize: 13,
+                        color: busy
+                            ? QuranTokens.secondaryColor(dark)
+                            : QuranTokens.brandColor(dark),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCompletedPhase() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.check_circle,
+          size: 40,
+          color: QuranTokens.brandColor(dark),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Murojaah selesai',
+          style: QuranTokens.poppins(
+            TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: QuranTokens.inkColor(dark),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _start,
+          icon: const Icon(Icons.replay),
+          label: const Text('Ulangi'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            backgroundColor: QuranTokens.brandColor(dark),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _SecondaryButton — flanking icon + label button
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SecondaryButton extends StatelessWidget {
+  const _SecondaryButton({
+    required this.icon,
+    required this.label,
+    required this.dark,
+    this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool dark;
+  final VoidCallback? onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active
+        ? QuranTokens.brandColor(dark)
+        : onTap != null
+            ? QuranTokens.secondaryColor(dark)
+            : QuranTokens.secondaryColor(dark).withValues(alpha: 0.4);
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 56,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: color),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: QuranTokens.poppins(
+                  TextStyle(
+                    fontSize: 11,
+                    color: color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _AccumulatedNotifier — reactive listener untuk akumulasi transkrip ayat panjang
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// ValueNotifier tipis yang expose [MurojaahController.accumulatedTranscript]
-/// agar [_BottomControls] bisa rebuild tombol "Selesai" reaktif.
+/// agar long-verse Selesai button bisa rebuild secara reaktif.
 class _AccumulatedNotifier extends ValueNotifier<String> {
   _AccumulatedNotifier(this._controller)
       : super(_controller.accumulatedTranscript) {

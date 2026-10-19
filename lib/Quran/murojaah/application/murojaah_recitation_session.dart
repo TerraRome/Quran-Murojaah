@@ -97,6 +97,23 @@ class MurojaahRecitationSession extends ChangeNotifier {
   bool _started = false;
   MurojaahSessionConfig? _config;
 
+  /// True while [stop] is draining. Prevents a second concurrent stop.
+  bool _stopping = false;
+
+  /// True once [SessionStopped] has been emitted for this session.
+  /// Reset by [start]. Deduplicates the event between [stop] and the
+  /// auto-stop inside [_runAsr].
+  bool _stopEmitted = false;
+
+  /// True once [_tearDownImpl] has begun. Used by [_runAsr] to discard
+  /// results that arrive after the session was torn down. Distinct from
+  /// [_started] because [stop] clears that flag before awaiting ASR.
+  bool _tornDown = false;
+
+  /// Memoized teardown so concurrent callers (stop, dispose, _runAsr)
+  /// never run the teardown body twice.
+  Future<void>? _tearDownFuture;
+
   // ── Recorder stream subscription ─────────────────────────────────────────
 
   StreamSubscription<Uint8List>? _audioSub;
@@ -161,6 +178,10 @@ class MurojaahRecitationSession extends ChangeNotifier {
     }
 
     _config = config;
+    _stopping = false;
+    _stopEmitted = false;
+    _tornDown = false;
+    _tearDownFuture = null;
     debugPrint(
       '[Session] start() — expected="${config.expectedArabic.substring(0, config.expectedArabic.length.clamp(0, 30))}…"',
     );
@@ -234,20 +255,67 @@ class MurojaahRecitationSession extends ChangeNotifier {
 
   /// Stop the session cleanly.
   ///
-  /// Stops the recorder and cancels the audio stream subscription.
-  /// Any in-flight ASR inference completes but its result is discarded.
-  /// Safe to call from any state, including idle and disposed.
+  /// Order matters:
+  ///   1. stop the recorder while the subscription is still live, so the
+  ///      final platform chunks are captured;
+  ///   2. yield once so those chunks are delivered to [_onAudioChunk];
+  ///   3. close the subscription;
+  ///   4. [MurojaahUtteranceSegmenter.flush] so speech that never reached the
+  ///      silence or max-duration threshold is not lost;
+  ///   5. consume and enqueue it, then wait (bounded) for ASR to finish;
+  ///   6. tear down.
+  ///
+  /// Any in-flight ASR inference is awaited up to [_asrDrainTimeout]. Results
+  /// that arrive after teardown are discarded. Safe to call repeatedly and
+  /// from any state, including idle and disposed.
   Future<void> stop() async {
-    if (_disposed || !_started) {
-      debugPrint('[Session] stop() — not started or disposed, skipping.');
+    if (_disposed || !_started || _stopping) {
+      debugPrint('[Session] stop() — not started, stopping, or disposed.');
       return;
     }
     debugPrint('[Session] stop() called.');
+    _stopping = true;
 
-    await _tearDown();
+    try {
+      // 1. Stop the recorder first: its teardown pushes the remaining PCM
+      //    through the broadcast stream, which only reaches us while the
+      //    subscription is still active.
+      if (_recorder.isRecording) {
+        try {
+          await _recorder.stop();
+        } catch (e) {
+          debugPrint('[Session] recorder.stop() failed during stop(): $e');
+        }
+      }
 
-    _setState(_state.copyWith(status: MurojaahSessionStatus.idle));
-    _emitEvent(const SessionStopped());
+      // 2. Let the event loop deliver chunks queued by the recorder teardown.
+      await Future<void>.delayed(Duration.zero);
+
+      // 3. No more input from this point.
+      _started = false;
+      await _audioSub?.cancel();
+      _audioSub = null;
+
+      // 4. Finalize whatever speech is still buffered.
+      _segmenter.flush();
+
+      // 5. Consume it and hand it to ASR.
+      _consumeSegmenterOutput();
+
+      // 6. Let ASR finish so the flushed utterance is actually processed.
+      await _awaitAsrIdle();
+
+      if (_disposed) {
+        debugPrint('[Session] stop() — disposed during drain, aborting.');
+        return;
+      }
+
+      await _tearDown();
+      _setState(_state.copyWith(status: MurojaahSessionStatus.idle));
+      _emitStoppedOnce();
+    } finally {
+      _stopping = false;
+    }
   }
 
   /// Release all resources. Must be called when the session is no longer
@@ -268,7 +336,12 @@ class MurojaahRecitationSession extends ChangeNotifier {
   // Tear-down (shared by stop() and dispose())
   // ---------------------------------------------------------------------------
 
-  Future<void> _tearDown() async {
+  Future<void> _tearDown() {
+    return _tearDownFuture ??= _tearDownImpl();
+  }
+
+  Future<void> _tearDownImpl() async {
+    _tornDown = true;
     _started = false;
     _utteranceQueue.clear();
     _prevSegmenterState = SegmenterState.idle; // E4: reset onset tracker
@@ -298,6 +371,15 @@ class MurojaahRecitationSession extends ChangeNotifier {
     // Feed bytes into the segmenter (int16 LE PCM).
     _segmenter.addBytes(bytes);
 
+    _consumeSegmenterOutput();
+  }
+
+  /// Reads the segmenter's current state: publishes live diagnostics, emits
+  /// [SpeechStarted] on onset, and consumes a finalized utterance.
+  ///
+  /// Shared by [_onAudioChunk] and [stop] so the flush path produces the same
+  /// events as a naturally finalized utterance.
+  void _consumeSegmenterOutput() {
     // Update live diagnostics from the segmenter.
     final nowSpeaking = _segmenter.isSpeechDetected;
 
@@ -411,6 +493,14 @@ class MurojaahRecitationSession extends ChangeNotifier {
       return;
     }
 
+    // Lifecycle guard: the session may have been torn down while we awaited.
+    // Applying a stale result would overwrite a newer session's state.
+    if (_tornDown || _disposed) {
+      debugPrint('[Session] ASR result discarded — session no longer active.');
+      _asrRunning = false;
+      return;
+    }
+
     debugPrint(
       '[Session] ASR completed: transcript="${asrResult.transcript}" '
       '${asrResult.timings}',
@@ -455,7 +545,7 @@ class MurojaahRecitationSession extends ChangeNotifier {
     if (matchResult.decision == MurojaahDecision.accept) {
       debugPrint('[Session] ACCEPT — stopping session.');
       await _tearDown();
-      _emitEvent(const SessionStopped());
+      _emitStoppedOnce();
       return;
     }
 
@@ -479,6 +569,38 @@ class MurojaahRecitationSession extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /// Upper bound on how long [stop] waits for ASR to finish.
+  static const Duration _asrDrainTimeout = Duration(seconds: 15);
+
+  /// Polling interval while draining.
+  static const Duration _asrDrainPollInterval = Duration(milliseconds: 10);
+
+  /// Waits until no inference is running and the queue is empty.
+  ///
+  /// Returns early on [_asrDrainTimeout]; a stuck engine must not hang the UI.
+  /// The caller still tears down — the result is simply lost, as before.
+  Future<void> _awaitAsrIdle() async {
+    final stopwatch = Stopwatch()..start();
+    while (_asrRunning || _utteranceQueue.isNotEmpty) {
+      if (stopwatch.elapsed >= _asrDrainTimeout) {
+        debugPrint(
+          '[Session] ASR drain timed out after '
+          '${stopwatch.elapsedMilliseconds}ms '
+          '(running=$_asrRunning queued=${_utteranceQueue.length}).',
+        );
+        return;
+      }
+      await Future<void>.delayed(_asrDrainPollInterval);
+    }
+  }
+
+  /// Emits [SessionStopped] at most once per session.
+  void _emitStoppedOnce() {
+    if (_stopEmitted) return;
+    _stopEmitted = true;
+    _emitEvent(const SessionStopped());
+  }
 
   void _setState(MurojaahSessionState next) {
     if (_disposed) return;

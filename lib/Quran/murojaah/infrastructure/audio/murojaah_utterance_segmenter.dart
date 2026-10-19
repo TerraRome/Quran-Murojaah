@@ -148,6 +148,11 @@ class MurojaahUtteranceSegmenter {
   int _consecutiveSpeechFrames = 0;
   int _consecutiveSilenceFrames = 0;
 
+  /// Set by [flush]. While true, [addBytes] and [addSamples] ignore input so
+  /// nothing can arrive after the stream has been finalized. Cleared by
+  /// [reset] when a new stream starts.
+  bool _closed = false;
+
   // -------------------------------------------------------------------------
   // Primary API
   // -------------------------------------------------------------------------
@@ -157,6 +162,7 @@ class MurojaahUtteranceSegmenter {
   /// Frames are extracted internally. Incomplete frames are buffered across
   /// calls so chunk boundaries do not affect segmentation correctness.
   void addBytes(List<int> bytes) {
+    if (_closed) return;
     _byteAccum.addAll(bytes);
     final bytesPerFrame = config.samplesPerFrame * 2; // int16 = 2 bytes
     while (_byteAccum.length >= bytesPerFrame) {
@@ -171,6 +177,7 @@ class MurojaahUtteranceSegmenter {
   /// Sub-frame tails are buffered across calls so arbitrary chunk sizes
   /// are handled correctly.
   void addSamples(Float32List samples) {
+    if (_closed) return;
     _sampleAccum.addAll(samples);
     while (_sampleAccum.length >= config.samplesPerFrame) {
       final frame = Float32List.fromList(
@@ -203,6 +210,47 @@ class MurojaahUtteranceSegmenter {
     return buffer;
   }
 
+  /// Finalize the stream: emit whatever is still buffered as an utterance.
+  ///
+  /// Call this once when the audio source stops (end of stream) so speech
+  /// that never reached the silence or max-duration threshold is not lost.
+  ///
+  /// Idempotent — safe to call more than once. After the first call the
+  /// segmenter is closed: [addBytes] and [addSamples] ignore input until
+  /// [reset] is called.
+  ///
+  /// Sub-frame tails still sitting in the accumulators are processed as a
+  /// final partial frame, so no samples are dropped and none are duplicated
+  /// (a sample lives in exactly one accumulator).
+  void flush() {
+    if (_closed) return;
+    _closed = true;
+
+    // Drain leftovers so the tail of the stream is not lost.
+    if (_sampleAccum.isNotEmpty) {
+      final tail = Float32List.fromList(_sampleAccum);
+      _sampleAccum.clear();
+      _processFrame(tail);
+    }
+    if (_byteAccum.length >= 2) {
+      final tail = _int16BytesToFloat32(_byteAccum);
+      _byteAccum.clear();
+      _processFrame(tail);
+    }
+    _byteAccum.clear();
+
+    // Only an in-progress utterance needs finalizing. If the state machine
+    // already emitted one (sustained silence or max duration), the caller
+    // still has to consume it — flushing again would duplicate it.
+    if (_state != SegmenterState.speaking) return;
+    if (_speakingBuffer.isEmpty) return;
+
+    _trimTrailingSilence();
+    if (_speakingBuffer.isEmpty) return;
+
+    _setState(SegmenterState.utteranceReady, reason: 'stream flushed');
+  }
+
   /// Discard any in-progress utterance and return to [SegmenterState.idle].
   ///
   /// Also resets all counters and diagnostics.
@@ -219,6 +267,7 @@ class MurojaahUtteranceSegmenter {
     _totalSamples = 0;
     _finalizedUtteranceCount = 0;
     _state = SegmenterState.idle;
+    _closed = false;
   }
 
   // -------------------------------------------------------------------------

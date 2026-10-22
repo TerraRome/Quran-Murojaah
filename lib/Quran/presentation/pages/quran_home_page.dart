@@ -9,6 +9,8 @@ import '../../doa/application/doa_controller.dart';
 import '../../doa/presentation/pages/doa_list_page.dart';
 import '../../domain/entities/surah.dart';
 import '../../murojaah/presentation/pages/murojaah_page.dart';
+import '../../murojaah/presentation/widgets/today_activity_summary.dart';
+import '../../murojaah/progress/progress_controller.dart';
 import '../../shalat/application/shalat_controller.dart';
 import '../../shalat/presentation/pages/shalat_page.dart';
 import '../widgets/quran_status_bar.dart';
@@ -24,11 +26,13 @@ class QuranHomePage extends StatefulWidget {
     required this.controller,
     required this.doaController,
     required this.shalatController,
+    required this.murojaahProgress,
   });
 
   final QuranController controller;
   final DoaController doaController;
   final ShalatController shalatController;
+  final MurojaahProgressController murojaahProgress;
 
   @override
   State<QuranHomePage> createState() => _QuranHomePageState();
@@ -53,6 +57,17 @@ class _QuranHomePageState extends State<QuranHomePage> {
     super.initState();
     widget.controller.load();
     widget.controller.loadLastRead();
+    // Jumlah ayat per surah disuntikkan ke mesin progres: bonus "satu surah
+    // tamat" diturunkan dari log + angka ini, tanpa field baru di entri.
+    widget.murojaahProgress.verseCount = (number) =>
+        widget.controller.surahs
+            .where((s) => s.number == number)
+            .firstOrNull
+            ?.totalVerses ??
+        0;
+    if (!widget.murojaahProgress.isLoaded) {
+      widget.murojaahProgress.load();
+    }
   }
 
   @override
@@ -137,6 +152,15 @@ class _QuranHomePageState extends State<QuranHomePage> {
                               child: _LastReadCard(
                                 controller: widget.controller,
                                 dark: dark,
+                              ),
+                            ),
+                          if (_query.isEmpty)
+                            SliverToBoxAdapter(
+                              child: ListenableBuilder(
+                                listenable: widget.murojaahProgress,
+                                builder: (context, _) => TodayActivitySummary(
+                                  snapshot: widget.murojaahProgress.snapshot(),
+                                ),
                               ),
                             ),
                         ],
@@ -277,7 +301,10 @@ class _QuranHomePageState extends State<QuranHomePage> {
   List<Widget> _buildContentSlivers(QuranState state, bool dark) {
     if (_tabIndex == 1) {
       return [
-        MurojaahPage(controller: widget.controller),
+        MurojaahPage(
+          controller: widget.controller,
+          progress: widget.murojaahProgress,
+        ),
       ];
     }
     if (_tabIndex == 2) {
@@ -292,7 +319,10 @@ class _QuranHomePageState extends State<QuranHomePage> {
       return [
         SliverFillRemaining(
           hasScrollBody: true,
-          child: DoaListPage(controller: widget.doaController),
+          child: DoaListPage(
+            controller: widget.doaController,
+            readingProgress: widget.murojaahProgress,
+          ),
         ),
       ];
     }
@@ -478,7 +508,7 @@ class _LastReadCard extends StatelessWidget {
                       verseLabel,
                       style: QuranTokens.poppins(
                         QuranTokens.tsLastReadSub,
-                      ).copyWith(color: Colors.white.withValues(alpha: 0.8)),
+                      ).copyWith(color: Colors.white),
                     ),
                   ],
                 ),

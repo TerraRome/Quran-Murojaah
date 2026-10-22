@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'data/quran_tokens.dart';
 import 'presentation/widgets/quran_theme_scope.dart';
 import 'quran_router.dart';
 
@@ -13,16 +14,18 @@ class QuranApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return QuranThemeScope(
-      child: MaterialApp.router(
-        title: 'Quran App',
-        debugShowCheckedModeBanner: false,
-        routerConfig: quranRouter,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6B4EFF),
-          ),
-        ),
+      child: Builder(
+        builder: (context) {
+          final dark = QuranThemeScope.darkOf(context);
+          return MaterialApp.router(
+            title: 'Quran App',
+            debugShowCheckedModeBanner: false,
+            routerConfig: quranRouter,
+            theme: QuranTokens.themeData(false),
+            darkTheme: QuranTokens.themeData(true),
+            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+          );
+        },
       ),
     );
   }

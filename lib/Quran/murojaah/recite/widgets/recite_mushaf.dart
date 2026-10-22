@@ -105,8 +105,10 @@ class _ReciteMushafState extends State<ReciteMushaf> {
   @override
   Widget build(BuildContext context) {
     final dark = QuranThemeScope.darkOf(context);
-    final fontSize =
-        (QuranThemeScope.arabicFontSizeOf(context) * 1.55).clamp(21.0, 40.0);
+    final fontSize = (QuranThemeScope.arabicFontSizeOf(context) * 1.55).clamp(
+      21.0,
+      40.0,
+    );
     final base = QuranTokens.amiri(
       TextStyle(
         fontSize: fontSize,
@@ -140,6 +142,19 @@ class _ReciteMushafState extends State<ReciteMushaf> {
                         },
                   child: Stack(
                     children: [
+                      // Sorot ayat yang sedang dinilai (di belakang teks).
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _ActiveVersePainter(
+                              boxes:
+                                  layout.verseBoxes[widget.activeVerse] ??
+                                  const [],
+                              color: QuranTokens.brandColor(dark),
+                            ),
+                          ),
+                        ),
+                      ),
                       // Lebar penuh supaya RichText dan overlay redaksi memakai
                       // sistem koordinat yang sama (RTL → rata kanan).
                       SizedBox(
@@ -154,8 +169,12 @@ class _ReciteMushafState extends State<ReciteMushaf> {
                           child: CustomPaint(
                             painter: _RedactionPainter(
                               boxes: layout.hiddenBoxes,
-                              color: QuranTokens.secondaryColor(dark)
-                                  .withValues(alpha: dark ? 0.34 : 0.26),
+                              color: QuranTokens.hidden(
+                                dark,
+                              ).withValues(alpha: dark ? 0.14 : 0.10),
+                              dash: QuranTokens.hidden(
+                                dark,
+                              ).withValues(alpha: dark ? 0.90 : 0.75),
                             ),
                           ),
                         ),
@@ -175,8 +194,14 @@ class _ReciteMushafState extends State<ReciteMushaf> {
 /// Dokumen mushaf: rangkaian span (kata + penanda ayat) beserta offset tiap
 /// kata/ayat untuk menghitung kotak redaksi.
 class _MushafDoc {
-  _MushafDoc._(this.spans, this.wordRanges, this.verseStarts, this.verseEnds,
-      this.hiddenWords, this.style);
+  _MushafDoc._(
+    this.spans,
+    this.wordRanges,
+    this.verseStarts,
+    this.verseEnds,
+    this.hiddenWords,
+    this.style,
+  );
 
   final List<InlineSpan> spans;
 
@@ -186,7 +211,8 @@ class _MushafDoc {
   final List<int> verseEnds;
 
   /// `wordId` kata yang belum cocok — sumber blok redaksi.
-  final List<int> hiddenWords;  final TextStyle style;
+  final List<int> hiddenWords;
+  final TextStyle style;
 
   double? _width;
   _MushafLayout? _layout;
@@ -204,8 +230,8 @@ class _MushafDoc {
     final starts = <int>[];
     final ends = <int>[];
     final hidden = <int>[];
-    final green = QuranTokens.successColor(dark);
-    final red = Colors.red.shade400;
+    final green = QuranTokens.correct(dark);
+    final red = QuranTokens.wrong(dark);
     final ink = QuranTokens.inkColor(dark);
     var offset = 0;
     var wordId = 0;
@@ -224,12 +250,28 @@ class _MushafDoc {
         final Color color = matched.contains(wordId)
             ? green
             : missed.contains(wordId)
-                ? red
-                : wordId == peekWord
-                    ? ink
-                    : Colors.transparent;
+            ? red
+            : wordId == peekWord
+            ? ink
+            : Colors.transparent;
         if (color == Colors.transparent) hidden.add(wordId);
-        spans.add(TextSpan(text: word, style: TextStyle(color: color)));
+        // Kata merah juga diberi garis bawah bergelombang: penanda bentuk, bukan
+        // warna saja — tetap terbaca oleh pengguna buta warna.
+        final isMissed = missed.contains(wordId);
+        spans.add(
+          TextSpan(
+            text: word,
+            style: TextStyle(
+              color: color,
+              decoration: isMissed
+                  ? TextDecoration.underline
+                  : TextDecoration.none,
+              decorationStyle: isMissed ? TextDecorationStyle.wavy : null,
+              decorationColor: red,
+              decorationThickness: 2,
+            ),
+          ),
+        );
         ranges.add((offset, offset + word.length));
         offset += word.length;
         wordId++;
@@ -257,11 +299,11 @@ class _MushafDoc {
     )..layout(maxWidth: maxWidth);
 
     List<Rect> boxesOf(int start, int end) => [
-          for (final b in painter.getBoxesForSelection(
-            TextSelection(baseOffset: start, extentOffset: end),
-          ))
-            Rect.fromLTRB(b.left, b.top, b.right, b.bottom),
-        ];
+      for (final b in painter.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      ))
+        Rect.fromLTRB(b.left, b.top, b.right, b.bottom),
+    ];
 
     final verseBoxes = <int, List<Rect>>{};
     for (var i = 0; i < verseStarts.length; i++) {
@@ -275,14 +317,20 @@ class _MushafDoc {
     ]);
 
     _width = maxWidth;
-    return _layout = _MushafLayout(verseBoxes, hiddenBoxes, painter, wordRanges);
+    return _layout = _MushafLayout(
+      verseBoxes,
+      hiddenBoxes,
+      painter,
+      wordRanges,
+    );
   }
 
   /// Gabungkan kotak per-kata menjadi satu batang per baris, tapi hanya untuk
   /// kata yang berurutan: blok tidak boleh menutupi kata yang sudah terbuka.
   static List<Rect> _mergeRuns(List<({int id, Rect rect})> boxes) {
     if (boxes.length < 2) return [for (final b in boxes) b.rect];
-    final sorted = [...boxes]..sort((a, b) {
+    final sorted = [...boxes]
+      ..sort((a, b) {
         if ((a.rect.top - b.rect.top).abs() > 2) {
           return a.rect.top.compareTo(b.rect.top);
         }
@@ -338,33 +386,105 @@ class _MushafLayout {
   }
 }
 
-/// Menutup kata yang belum terbuka dengan blok solid.
+/// Menutup kata yang belum terbuka: kotak bergaris putus-putus, tanpa blok
+/// penuh — kata di bawahnya tetap terlihat samar sebagai bentuk, bukan
+/// tertutup warna. Penanda bentuk (garis), bukan hanya warna.
+///
+/// Kotak tetap sama persis dengan kotak teks (hanya warna/guratan yang
+/// berubah) supaya overlay dan hit-test tidak bergeser.
 class _RedactionPainter extends CustomPainter {
-  _RedactionPainter({required this.boxes, required this.color});
+  _RedactionPainter({
+    required this.boxes,
+    required this.color,
+    required this.dash,
+  });
+
+  final List<Rect> boxes;
+  final Color color;
+  final Color dash;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fill = Paint()..color = color;
+    final stroke = Paint()
+      ..color = dash
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+    for (final rect in boxes) {
+      final r = Rect.fromLTRB(
+        rect.left - 1,
+        rect.top + 5,
+        rect.right + 1,
+        rect.bottom - 5,
+      );
+      final rr = RRect.fromRectAndRadius(r, const Radius.circular(4));
+      // Isi sangat tipis: cukup memisahkan dari latar, tidak menutupi bentuk
+      // kata. Garis putus-putus yang menyatakan "di sini ada kata".
+      canvas.drawRRect(rr, fill);
+      _dashPath(canvas, Path()..addRRect(rr), stroke);
+    }
+  }
+
+  /// Garis putus-putus mengikuti keliling kotak.
+  void _dashPath(Canvas canvas, Path path, Paint paint) {
+    const on = 5.0;
+    const off = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        final end = math.min(d + on, metric.length);
+        canvas.drawPath(metric.extractPath(d, end), paint);
+        d = end + off;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RedactionPainter old) =>
+      old.boxes != boxes || old.color != color || old.dash != dash;
+}
+
+/// Latar lembut + batang penanda untuk ayat yang sedang dinilai.
+class _ActiveVersePainter extends CustomPainter {
+  _ActiveVersePainter({required this.boxes, required this.color});
 
   final List<Rect> boxes;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    for (final rect in boxes) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(
-            rect.left - 1,
-            rect.top + 5,
-            rect.right + 1,
-            rect.bottom - 5,
-          ),
-          const Radius.circular(3),
-        ),
-        paint,
-      );
+    if (boxes.isEmpty) return;
+    var r = boxes.first;
+    for (final b in boxes.skip(1)) {
+      r = r.expandToInclude(b);
     }
+    final rect = Rect.fromLTRB(
+      r.left - 10,
+      r.top - 2,
+      r.right + 10,
+      r.bottom + 2,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(10)),
+      Paint()..color = color.withValues(alpha: 0.07),
+    );
+    // Batang di sisi kanan (awal bacaan pada teks RTL): penanda bentuk.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(
+          rect.right - 3,
+          rect.top + 6,
+          rect.right,
+          rect.bottom - 6,
+        ),
+        const Radius.circular(2),
+      ),
+      Paint()..color = color.withValues(alpha: 0.55),
+    );
   }
 
   @override
-  bool shouldRepaint(_RedactionPainter old) =>
+  bool shouldRepaint(_ActiveVersePainter old) =>
       old.boxes != boxes || old.color != color;
 }

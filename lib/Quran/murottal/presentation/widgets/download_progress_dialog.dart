@@ -60,8 +60,11 @@ class DownloadProgressDialog extends StatelessWidget {
           ),
           title: Row(
             children: [
-              const Icon(Icons.download_rounded,
-                  color: QuranTokens.primary, size: 22),
+              Icon(
+                Icons.download_rounded,
+                color: QuranTokens.brandOf(context),
+                size: 22,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -92,14 +95,15 @@ class DownloadProgressDialog extends StatelessWidget {
           child: Text(
             'Batal',
             style: QuranTokens.poppins(
-              const TextStyle(color: QuranTokens.secondary),
+              TextStyle(color: QuranTokens.mutedOf(context)),
             ),
           ),
         ),
         FilledButton.icon(
           onPressed: onConfirm,
           style: FilledButton.styleFrom(
-            backgroundColor: QuranTokens.primary,
+            backgroundColor: QuranTokens.brandOf(context),
+            foregroundColor: QuranTokens.onBrandOf(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -125,7 +129,7 @@ class DownloadProgressDialog extends StatelessWidget {
           child: Text(
             'Batalkan',
             style: QuranTokens.poppins(
-              const TextStyle(color: QuranTokens.secondary),
+              TextStyle(color: QuranTokens.mutedOf(context)),
             ),
           ),
         ),
@@ -139,14 +143,15 @@ class DownloadProgressDialog extends StatelessWidget {
           child: Text(
             'Tutup',
             style: QuranTokens.poppins(
-              const TextStyle(color: QuranTokens.secondary),
+              TextStyle(color: QuranTokens.mutedOf(context)),
             ),
           ),
         ),
         FilledButton(
           onPressed: onConfirm,
           style: FilledButton.styleFrom(
-            backgroundColor: QuranTokens.primary,
+            backgroundColor: QuranTokens.brandOf(context),
+            foregroundColor: QuranTokens.onBrandOf(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -199,12 +204,12 @@ class _CheckingSizeContent extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 8),
-        const CircularProgressIndicator(color: QuranTokens.primary),
+        CircularProgressIndicator(color: QuranTokens.brandOf(context)),
         const SizedBox(height: 16),
         Text(
           'Mengecek ukuran file...',
           style: QuranTokens.poppins(
-            const TextStyle(fontSize: 14, color: QuranTokens.secondary),
+            TextStyle(fontSize: 14, color: QuranTokens.mutedOf(context)),
           ),
         ),
       ],
@@ -239,7 +244,7 @@ class _ReadyContent extends StatelessWidget {
           value: fileSizeLabel,
         ),
         const SizedBox(height: 8),
-        _InfoRow(
+        const _InfoRow(
           icon: Icons.wifi_off_rounded,
           label: 'Setelah download',
           value: 'Offline ready',
@@ -269,16 +274,17 @@ class _ProgressContent extends StatelessWidget {
             Text(
               'Mengunduh...',
               style: QuranTokens.poppins(
-                const TextStyle(fontSize: 13, color: QuranTokens.secondary),
+                TextStyle(fontSize: 13, color: QuranTokens.mutedOf(context)),
               ),
             ),
             Text(
               percent != null ? '$percent%' : '',
               style: QuranTokens.poppins(
-                const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: QuranTokens.primary),
+                TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: QuranTokens.brandOf(context),
+                ),
               ),
             ),
           ],
@@ -289,8 +295,12 @@ class _ProgressContent extends StatelessWidget {
           child: LinearProgressIndicator(
             value: progress,
             minHeight: 8,
-            backgroundColor: QuranTokens.lightCard,
-            valueColor: const AlwaysStoppedAnimation<Color>(QuranTokens.primary),
+            backgroundColor: QuranTokens.border(
+              Theme.of(context).brightness == Brightness.dark,
+            ),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              QuranTokens.brandOf(context),
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -300,14 +310,14 @@ class _ProgressContent extends StatelessWidget {
             Text(
               state.receivedLabel,
               style: QuranTokens.poppins(
-                const TextStyle(fontSize: 12, color: QuranTokens.secondary),
+                TextStyle(fontSize: 12, color: QuranTokens.mutedOf(context)),
               ),
             ),
             if (etaLabel.isNotEmpty)
               Text(
                 'Sisa: $etaLabel',
                 style: QuranTokens.poppins(
-                  const TextStyle(fontSize: 12, color: QuranTokens.secondary),
+                  TextStyle(fontSize: 12, color: QuranTokens.mutedOf(context)),
                 ),
               ),
           ],
@@ -325,7 +335,11 @@ class _CompletedContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.check_circle_rounded, color: Colors.green, size: 32),
+        Icon(
+          Icons.check_circle_rounded,
+          color: QuranTokens.correctOf(context),
+          size: 32,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
@@ -347,13 +361,20 @@ class _ErrorContent extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+        Icon(
+          Icons.error_outline_rounded,
+          color: QuranTokens.wrongOf(context),
+          size: 28,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
             message,
             style: QuranTokens.poppins(
-              const TextStyle(fontSize: 13, color: Colors.red),
+              TextStyle(
+                fontSize: 13,
+                color: QuranTokens.wrongOf(context),
+              ),
             ),
           ),
         ),
@@ -376,12 +397,12 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: QuranTokens.secondary),
+        Icon(icon, size: 16, color: QuranTokens.mutedOf(context)),
         const SizedBox(width: 8),
         Text(
           '$label: ',
           style: QuranTokens.poppins(
-            const TextStyle(fontSize: 13, color: QuranTokens.secondary),
+            TextStyle(fontSize: 13, color: QuranTokens.mutedOf(context)),
           ),
         ),
         Text(

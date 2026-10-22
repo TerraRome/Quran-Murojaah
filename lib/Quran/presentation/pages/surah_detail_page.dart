@@ -9,6 +9,10 @@ import '../../data/quran_tokens.dart';
 import '../../domain/entities/qari.dart';
 import '../../domain/entities/surah.dart';
 import '../../domain/failures/quran_failure.dart';
+import '../../murojaah/progress/activity_entry.dart';
+import '../../murojaah/progress/progress_controller.dart';
+import '../../murojaah/progress/reading_dwell.dart';
+import '../../murojaah/progress/reading_log_recorder.dart';
 import '../../murottal/application/download_controller.dart';
 import '../../murottal/application/murottal_controller.dart';
 import '../../murottal/application/qari_store.dart';
@@ -29,20 +33,27 @@ class SurahDetailPage extends StatefulWidget {
     super.key,
     required this.surahNumber,
     required this.controller,
+    this.readingProgress,
   });
 
   final int surahNumber;
   final QuranController controller;
 
+  /// Log aktivitas untuk mencatat "ayat dibaca". Null = tidak mencatat
+  /// (dipakai pratinjau/test lama).
+  final MurojaahProgressController? readingProgress;
+
   @override
   State<SurahDetailPage> createState() => _SurahDetailPageState();
 }
 
-class _SurahDetailPageState extends State<SurahDetailPage> {
+class _SurahDetailPageState extends State<SurahDetailPage>
+    with WidgetsBindingObserver {
   Surah? _surah;
   bool _loading = true;
   QuranFailure? _error;
 
+  late final ReadingLogRecorder _readingRecorder;
   late final EquranRemoteDataSource _remoteDatasource;
   late final AudioLocalDataSource _localDataSource;
   late final TafsirController _tafsirController;
@@ -72,9 +83,19 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
     );
     _downloadController = DownloadController(localDataSource: _localDataSource);
     _scrollController = ScrollController();
+    _readingRecorder = ReadingLogRecorder(
+      progress: widget.readingProgress,
+      type: ActivityType.quranRead,
+    );
+    WidgetsBinding.instance.addObserver(this);
     _murottalController.addListener(_onMurottalStateChanged);
     _initQariFromPrefs();
     _load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _readingRecorder.handleLifecycle(state);
   }
 
   /// Auto-scroll ke ayat aktif — baik mode full-surah maupun per-ayat.
@@ -113,6 +134,10 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _readingRecorder
+      ..flush()
+      ..dispose();
     _murottalController.removeListener(_onMurottalStateChanged);
     _tafsirController.dispose();
     _murottalController.dispose();
@@ -152,6 +177,12 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
     }
   }
 
+  /// Tandai semua ayat yang sedang tampil sebagai sudah dibaca.
+  void _markVisibleRead() {
+    _readingRecorder.markVisibleAsRead();
+    _readingRecorder.flush();
+  }
+
   void _openTafsir(int ayatNumber) async {
     final surah = _surah;
     if (surah == null) return;
@@ -163,6 +194,7 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
       verses: surah.verses,
       surahNumber: surah.number,
       totalAyat: surah.totalVerses,
+      readingProgress: widget.readingProgress,
     );
   }
 
@@ -250,11 +282,12 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text('Batal',
                   style: QuranTokens.poppins(
-                      const TextStyle(color: QuranTokens.secondary))),
+                      TextStyle(color: QuranTokens.mutedOf(ctx)))),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: QuranTokens.wrongOf(ctx),
+                foregroundColor: QuranTokens.onWrongOf(ctx),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
@@ -294,9 +327,14 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
         SnackBar(
           content: Text(
             'Gagal mengambil informasi audio.',
-            style: QuranTokens.poppins(const TextStyle(fontSize: 13)),
+            style: QuranTokens.poppins(
+              TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onError,
+              ),
+            ),
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
       return;
@@ -421,7 +459,12 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
                         key: verseKey,
                         padding: const EdgeInsets.only(
                             bottom: QuranTokens.space8),
-                        child: VerseView(
+                        child: ReadingDwell(
+                          recorder: _readingRecorder,
+                          itemKey: '${surah.number}:${verse.numberInSurah}',
+                          surahNumber: surah.number,
+                          verse: verse.numberInSurah,
+                          child: VerseView(
                           verse: verse,
                           surahNumber: surah.number,
                           showDivider: !isLastVerse,
@@ -433,6 +476,7 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
                               _onPlayAyat(verse.numberInSurah),
                           onTafsirTap: () =>
                               _openTafsir(verse.numberInSurah),
+                          ),
                         ),
                       );
                     },
@@ -442,6 +486,9 @@ class _SurahDetailPageState extends State<SurahDetailPage> {
             },
           ),
         ),
+
+        // Tandai dibaca — hanya untuk bacaan, bukan murottal
+        MarkReadButton(onPressed: _markVisibleRead),
 
         // Mini player — tampil saat audio sedang berjalan
         ValueListenableBuilder<MurottalState>(

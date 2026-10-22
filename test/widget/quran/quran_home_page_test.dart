@@ -10,6 +10,8 @@ import 'package:quran/Quran/shalat/data/datasources/shalat_local_datasource.dart
 import 'package:quran/Quran/shalat/data/datasources/shalat_remote_datasource.dart';
 import 'package:quran/Quran/shalat/data/models/jadwal_shalat_model.dart';
 import 'package:quran/Quran/data/last_read_store.dart';
+import 'package:quran/Quran/murojaah/progress/activity_store.dart';
+import 'package:quran/Quran/murojaah/progress/progress_controller.dart';
 import 'package:quran/Quran/domain/entities/surah.dart';
 import 'package:quran/Quran/domain/entities/verse.dart';
 import 'package:quran/Quran/domain/failures/quran_failure.dart';
@@ -127,6 +129,9 @@ void main() {
               local: ShalatLocalDataSource(),
               locationService: LocationService(),
             ),
+            murojaahProgress: MurojaahProgressController(
+              store: MemoryActivityStore(),
+            ),
           ),
         ),
       ),
@@ -175,6 +180,9 @@ void main() {
               remote: _FakeShalatRemote(),
               local: ShalatLocalDataSource(),
               locationService: LocationService(),
+            ),
+            murojaahProgress: MurojaahProgressController(
+              store: MemoryActivityStore(),
             ),
           ),
         ),

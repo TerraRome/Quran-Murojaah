@@ -210,8 +210,14 @@ class _VerseNumberBadge extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         '$number',
-        style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-            .copyWith(color: Colors.white, height: 1),
+        style: QuranTokens.poppins(
+          QuranTokens.tsVerseNumber,
+        ).copyWith(
+          // Lingkaran nomor berlatar brandColor, bukan gradient: putih gagal
+          // di mode gelap (1.9:1), jadi pakai pasangan onPrimary.
+          color: QuranTokens.onPrimaryColor(dark),
+          height: 1,
+        ),
       ),
     );
   }

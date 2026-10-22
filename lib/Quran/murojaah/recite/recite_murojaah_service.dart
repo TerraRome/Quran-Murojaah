@@ -3,15 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:recite_quran/recite_quran.dart';
 
-/// Lifecycle of the on-device recitation engine for one surah.
-enum ReciteMurojaahStatus {
-  idle,
-  preparing,
-  downloadingModel,
-  ready,
-  listening,
-  error,
-}
+import 'recite_session_engine.dart';
+
+export 'recite_session_engine.dart' show ReciteMurojaahStatus;
 
 /// Mode ujian hafalan: lompatan tidak dimaafkan (auto re-anchor mati), sehingga
 /// kata yang dilewati ditandai merah. Ditulis eksplisit walau saat ini sama
@@ -24,14 +18,17 @@ const _examConfig = TrackerConfig(
 
 /// Thin facade over `recite_quran` for a single surah: loads the surah,
 /// ensures the ASR model exists, and pipes microphone audio into the tracker.
-class ReciteMurojaahService {
+class ReciteMurojaahService implements ReciteSessionEngine {
   ReciteMurojaahService({required this.surahNumber});
 
   final int surahNumber;
 
+  @override
   final ValueNotifier<ReciteMurojaahStatus> status =
       ValueNotifier<ReciteMurojaahStatus>(ReciteMurojaahStatus.idle);
+  @override
   final ValueNotifier<double> downloadProgress = ValueNotifier<double>(0);
+  @override
   final ValueNotifier<String?> errorMessage = ValueNotifier<String?>(null);
 
   final AudioProcessor _audio = AudioProcessor();
@@ -42,28 +39,34 @@ class ReciteMurojaahService {
   bool _disposed = false;
 
   /// Surah verses in Uthmani script; empty until [initialize] completes.
+  @override
   List<QuranVerse> get verses => _verses;
 
   /// Global word offset of each verse, plus a final sentinel:
   /// `wordAyahStarts[i] .. wordAyahStarts[i + 1]` are the tracker `wordId`s
   /// owned by `verses[i]`. Empty until [initialize] completes.
+  @override
   List<int> get wordAyahStarts => _wordAyahStarts;
   List<int> _wordAyahStarts = const [];
 
   /// Phoneme string tiap kata global (0-based `wordId`) — bahan
   /// `LcsOmissionDetector`. Empty until [initialize] completes.
+  @override
   List<String> get wordPhonemes => _wordPhonemes;
   List<String> _wordPhonemes = const [];
 
   /// Matched-word events from the tracker (broadcast).
+  @override
   Stream<WordMatchedEvent> get wordEvents =>
       _tracker?.onWordMatched ?? const Stream<WordMatchedEvent>.empty();
 
   /// Live ASR transcript (broadcast).
+  @override
   Stream<String> get transcript =>
       _tracker?.onTranscript ?? const Stream<String>.empty();
 
   /// Kata acuan global [wordId] dalam fonem (kosong bila di luar rentang).
+  @override
   String phonemesOf(int wordId) =>
       wordId >= 0 && wordId < _wordPhonemes.length ? _wordPhonemes[wordId] : '';
 
@@ -87,7 +90,11 @@ class ReciteMurojaahService {
         final raw = ayaText is Map ? ayaText['${v.surah}:${v.ayah}'] : null;
         final text = raw is Map ? raw['aya_text'] as String? : null;
         if (text == null) return v.uthmaniWords;
-        final words = text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+        final words = text
+            .trim()
+            .split(RegExp(r'\s+'))
+            .where((w) => w.isNotEmpty)
+            .toList();
         return words.length == v.uthmaniWords.length ? words : v.uthmaniWords;
       }
 
@@ -107,18 +114,6 @@ class ReciteMurojaahService {
       final engine = SherpaEngine(
         assetOverrideDir: await downloader.getModelDirectoryPath(),
       );
-      // TEMP-DIAG: transkrip mentah + status partial/final langsung dari engine.
-      // `ReciteQuran.onTranscript` tidak membedakan keduanya.
-      var lastDiagText = '';
-      engine.transcriptionStream.listen((r) {
-        if (!kDebugMode) return;
-        if (r.text == lastDiagText) return;
-        lastDiagText = r.text;
-        debugPrint(
-          '[DIAG][ASR] final=${r.isFinal} epoch=${r.streamEpoch} '
-          'len=${r.text.length} "${r.text}"',
-        );
-      });
       final tracker = ReciteQuran(
         repository: repository,
         // Model tidak dibundel di APK; arahkan engine ke folder unduhan.
@@ -153,8 +148,7 @@ class ReciteMurojaahService {
       }
       starts.add(words.length);
       _wordAyahStarts = List<int>.unmodifiable(starts);
-      _wordPhonemes =
-          List<String>.unmodifiable(words.map((w) => w.phoneme));
+      _wordPhonemes = List<String>.unmodifiable(words.map((w) => w.phoneme));
 
       _setStatus(ReciteMurojaahStatus.ready);
       _log('ready: surah=$surahNumber verses=${_verses.length}');
@@ -163,6 +157,7 @@ class ReciteMurojaahService {
     }
   }
 
+  @override
   Future<void> startListening() async {
     if (_disposed || _listening) return;
     await initialize();
@@ -188,6 +183,7 @@ class ReciteMurojaahService {
     _setStatus(ReciteMurojaahStatus.listening);
   }
 
+  @override
   Future<void> stopListening() async {
     if (!_listening) return;
     _listening = false;
@@ -202,6 +198,7 @@ class ReciteMurojaahService {
   /// mengosongkan buffer ASR, sedangkan kursor kata hidup di isolate. Tanpa ini
   /// bacaan ulang dicocokkan ke kata **berikutnya** sehingga ayat tampak maju
   /// sendiri dan tidak ada kata yang kembali hijau.
+  @override
   void rewindTo(int globalWordIndex) {
     if (_disposed) return;
     _tracker?.jumpToWord(globalWordIndex);

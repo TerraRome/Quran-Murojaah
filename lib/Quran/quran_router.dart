@@ -37,6 +37,7 @@ final GoRouter quranRouter = GoRouter(
             controller: QuranDependencies.controller,
             doaController: QuranDependencies.doaController,
             shalatController: QuranDependencies.shalatController,
+            murojaahProgress: QuranDependencies.murojaahProgress,
           ),
         ),
         GoRoute(
@@ -46,6 +47,7 @@ final GoRouter quranRouter = GoRouter(
             return SurahDetailPage(
               surahNumber: number,
               controller: QuranDependencies.controller,
+              readingProgress: QuranDependencies.murojaahProgress,
             );
           },
         ),
@@ -61,7 +63,10 @@ final GoRouter quranRouter = GoRouter(
           path: '/home/quran/murojaah/surah/:number',
           builder: (context, state) {
             final number = int.parse(state.pathParameters['number']!);
-            return ReciteMurojaahPage(surahNumber: number);
+            return ReciteMurojaahPage(
+              surahNumber: number,
+              progress: QuranDependencies.murojaahProgress,
+            );
           },
         ),
       ],

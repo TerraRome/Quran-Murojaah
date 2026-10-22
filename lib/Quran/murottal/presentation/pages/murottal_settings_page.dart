@@ -89,11 +89,12 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text('Batal',
                   style: QuranTokens.poppins(
-                      const TextStyle(color: QuranTokens.secondary))),
+                      TextStyle(color: QuranTokens.mutedOf(ctx)))),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: QuranTokens.wrong(dark),
+                foregroundColor: QuranTokens.onWrong(dark),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
@@ -137,11 +138,12 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text('Batal',
                   style: QuranTokens.poppins(
-                      const TextStyle(color: QuranTokens.secondary))),
+                      TextStyle(color: QuranTokens.mutedOf(ctx)))),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: QuranTokens.wrong(dark),
+                foregroundColor: QuranTokens.onWrong(dark),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
@@ -216,15 +218,19 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
                         if (_downloads.isNotEmpty)
                           TextButton.icon(
                             onPressed: _deleteAll,
-                            icon: const Icon(Icons.delete_sweep_rounded,
-                                size: 16, color: Colors.red),
+                            icon: Icon(
+                              Icons.delete_sweep_rounded,
+                              size: 16,
+                              color: QuranTokens.wrong(dark),
+                            ),
                             label: Text(
                               'Hapus Semua',
                               style: QuranTokens.poppins(
-                                const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.w500),
+                                TextStyle(
+                                  fontSize: 12,
+                                  color: QuranTokens.wrong(dark),
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
@@ -232,11 +238,12 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     if (_loadingDownloads)
-                      const Center(
+                      Center(
                         child: Padding(
-                          padding: EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(24),
                           child: CircularProgressIndicator(
-                              color: QuranTokens.primary),
+                            color: QuranTokens.brandColor(dark),
+                          ),
                         ),
                       )
                     else if (_downloads.isEmpty)
@@ -247,21 +254,27 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: QuranTokens.primary.withValues(alpha: 0.08),
+                          color: QuranTokens.brandColor(
+                            dark,
+                          ).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.storage_rounded,
-                                size: 16, color: QuranTokens.primary),
+                            Icon(
+                              Icons.storage_rounded,
+                              size: 16,
+                              color: QuranTokens.brandColor(dark),
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               '${_downloads.length} file · $_totalSizeLabel',
                               style: QuranTokens.poppins(
-                                const TextStyle(
-                                    fontSize: 13,
-                                    color: QuranTokens.primary,
-                                    fontWeight: FontWeight.w500),
+                                TextStyle(
+                                  fontSize: 13,
+                                  color: QuranTokens.brandColor(dark),
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],
@@ -327,12 +340,12 @@ class _QariTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? QuranTokens.primary.withValues(alpha: 0.08)
+              ? QuranTokens.brandColor(dark).withValues(alpha: 0.08)
               : QuranTokens.surface(dark),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? QuranTokens.primary
+                ? QuranTokens.brandColor(dark)
                 : QuranTokens.divider(dark),
             width: isSelected ? 1.5 : 1,
           ),
@@ -344,7 +357,7 @@ class _QariTile extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(
                 color: isSelected
-                    ? QuranTokens.primary
+                    ? QuranTokens.brandColor(dark)
                     : QuranTokens.divider(dark),
                 shape: BoxShape.circle,
               ),
@@ -355,7 +368,9 @@ class _QariTile extends StatelessWidget {
                     TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : QuranTokens.secondary,
+                      color: isSelected
+                          ? QuranTokens.onPrimaryColor(dark)
+                          : QuranTokens.textMuted(dark),
                     ),
                   ),
                 ),
@@ -371,15 +386,18 @@ class _QariTile extends StatelessWidget {
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.w400,
                     color: isSelected
-                        ? QuranTokens.primary
+                        ? QuranTokens.brandColor(dark)
                         : QuranTokens.inkColor(dark),
                   ),
                 ),
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle_rounded,
-                  color: QuranTokens.primary, size: 20),
+              Icon(
+                Icons.check_circle_rounded,
+                color: QuranTokens.brandColor(dark),
+                size: 20,
+              ),
           ],
         ),
       ),
@@ -450,8 +468,11 @@ class _DownloadTile extends StatelessWidget {
           ),
           IconButton(
             onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: Colors.red, size: 20),
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              color: QuranTokens.wrong(dark),
+              size: 20,
+            ),
             tooltip: 'Hapus',
           ),
         ],

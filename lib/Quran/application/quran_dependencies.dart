@@ -7,6 +7,7 @@ import '../domain/repositories/quran_repository.dart';
 import '../doa/application/doa_controller.dart';
 import '../doa/data/datasources/doa_local_datasource.dart';
 import '../doa/data/datasources/doa_remote_datasource.dart';
+import '../murojaah/progress/progress_controller.dart';
 import '../shalat/application/location_service.dart';
 import '../shalat/application/shalat_controller.dart';
 import '../shalat/data/datasources/shalat_local_datasource.dart';
@@ -45,4 +46,9 @@ class QuranDependencies {
     remote: EquranRemoteDataSourceImpl(),
     local: TransliterationLocalDataSource(),
   );
+
+  /// Log aktivitas murojaah + target harian. Dimuat sekali, lalu diperbarui
+  /// setiap kali sesi murojaah mencatat bacaan.
+  static final MurojaahProgressController murojaahProgress =
+      MurojaahProgressController();
 }

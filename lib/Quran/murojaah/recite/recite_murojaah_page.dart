@@ -1,101 +1,153 @@
 import 'dart:async';
-import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:recite_quran/recite_quran.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/quran_tokens.dart';
 import '../../presentation/widgets/quran_status_bar.dart';
 import '../../presentation/widgets/quran_theme_scope.dart';
-import 'asr_snapshot.dart';
-import 'heard_word.dart';
+import '../progress/progress_controller.dart';
 import 'recite_murojaah_service.dart';
+import 'recite_progress_recorder.dart';
+import 'recite_session_controller.dart';
 import 'widgets/recite_controls.dart';
 import 'widgets/recite_correction_sheet.dart';
+import 'widgets/recite_finish_screen.dart';
 import 'widgets/recite_mushaf.dart';
+import 'widgets/recite_onboarding.dart';
+import 'widgets/recite_surah_picker.dart';
 
 /// Halaman Murojaah baru: mushaf tersembunyi yang terbuka ayat demi ayat
 /// berdasarkan hasil pelacakan `recite_quran`.
 ///
-/// Halaman memiliki lifecycle service (create → initialize → dispose).
+/// Halaman memegang lifecycle service (create → initialize → dispose); seluruh
+/// state sesi dan keputusan penilaian ada di [ReciteSessionController].
 class ReciteMurojaahPage extends StatefulWidget {
-  const ReciteMurojaahPage({super.key, required this.surahNumber});
+  const ReciteMurojaahPage({
+    super.key,
+    required this.surahNumber,
+    this.progress,
+  });
 
   final int surahNumber;
+
+  /// Pencatat progres. Null = sesi berjalan tanpa mencatat apa pun (dipakai
+  /// pratinjau dan test yang tidak peduli progres).
+  final MurojaahProgressController? progress;
 
   @override
   State<ReciteMurojaahPage> createState() => _ReciteMurojaahPageState();
 }
 
-class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
+class _ReciteMurojaahPageState extends State<ReciteMurojaahPage>
+    with WidgetsBindingObserver {
   late final ReciteMurojaahService _service;
-  StreamSubscription<WordMatchedEvent>? _wordSub;
-  StreamSubscription<String>? _textSub;
+  late final ReciteSessionController _session;
+  late ReciteProgressRecorder _recorder;
 
-  List<QuranVerse> _verses = const [];
-  /// Offset kata global tiap ayat; panjang = jumlah ayat + 1.
-  final List<int> _wordStarts = [];
+  /// Layar selesai sedang tampil (surah tamat atau sesi dihentikan manual).
+  bool _finishVisible = false;
 
-  /// Kata global yang sudah diucapkan benar (hijau).
-  final Set<int> _matched = {};
-
-  /// Kata global yang salah / terlupa (merah).
-  final Set<int> _missed = {};
-
-  /// Transkrip ASR per ayat + bunyi tiap kata merah, terikat ke satu percobaan.
-  final AsrSnapshot _asr = AsrSnapshot();
-
-  /// Kata yang sedang dibuka sementara (peek hint) + jumlah peek.
-  int? _peekWord;
-  int _peekCount = 0;
-  Timer? _peekTimer;
-
-  /// Transkrip fonetis ASR terakhir (hipotesis kumulatif segmen aktif) —
-  /// bahan `LcsOmissionDetector`.
-  String _asrText = '';
-
-  /// Panjang awalan [_asrRaw] yang sudah menjadi milik ayat-ayat sebelumnya.
-  ///
-  /// Transkrip kumulatif satu segmen memuat semua ayat yang sudah dibaca. Tanpa
-  /// offset ini, kata pertama ayat baru bisa mendapat slot dari bunyi ayat lama
-  /// (sheet koreksi menampilkan bacaan ayat 1 untuk kata ayat 7).
-  int _asrOffset = 0;
-
-  /// Transkrip penuh segmen aktif, sebelum dipotong [_asrOffset].
-  String _asrRaw = '';
-
-  /// Awalan [_asrRaw] saat [_asrOffset] dihitung. Bila transkrip berikutnya
-  /// tidak lagi berawalan sama, engine memulai segmen baru dan offset gugur.
-  String _asrAnchor = '';
-
-  int _activeVerse = 0;
-  bool _sawEvent = false;
-
-  /// TEMP-DIAG: nomor percobaan, naik setiap Ulangi/Reset.
-  int _diagAttempt = 0;
-
-  /// TEMP-DIAG: transkrip terakhir yang sudah dilaporkan (hindari duplikat).
-  String _diagLastText = '';
+  /// Layar selesai yang tampil karena surah tamat, bukan karena dihentikan.
+  bool _surahComplete = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service = ReciteMurojaahService(surahNumber: widget.surahNumber);
+    _session = ReciteSessionController(engine: _service);
+    _recorder = ReciteProgressRecorder(
+      progress: widget.progress,
+      surahNumber: widget.surahNumber,
+    );
     _service.status.addListener(_onStatus);
+    _session.addListener(_onSessionChanged);
     unawaited(_initialize());
   }
 
   @override
   void dispose() {
-    _peekTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _service.status.removeListener(_onStatus);
-    _wordSub?.cancel();
-    _textSub?.cancel();
+    _session.removeListener(_onSessionChanged);
+    _session.dispose();
     unawaited(_service.dispose());
     super.dispose();
   }
+
+  /// Aplikasi ditinggalkan: catat progres sekarang, jangan tunggu sesi berhenti.
+  ///
+  /// Proses bisa dibunuh sistem saat di background, jadi ini kesempatan terakhir
+  /// menyelamatkan progres. Recorder mencegah ayat tercatat dua kali.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) unawaited(_recordProgress());
+  }
+
+  void _onSessionChanged() {
+    if (!_session.isComplete || _finishVisible) return;
+    unawaited(_recordProgress(showFinish: true, surahComplete: true));
+  }
+
+  /// Catat ayat yang sudah terbaca penuh, sebagai rentang berurutan.
+  ///
+  /// Dipanggil saat sesi berhenti, surah tamat, atau aplikasi masuk background —
+  /// bukan per kata, supaya log tidak membengkak dan XP tetap per ayat.
+  ///
+  /// [showFinish] hanya untuk dua peristiwa yang layak dirayakan: surah tamat
+  /// dan sesi dihentikan setelah minimal satu ayat tercatat. Pencatatan karena
+  /// aplikasi masuk background tidak boleh memunculkan layar selesai.
+  Future<void> _recordProgress({
+    bool showFinish = false,
+    bool surahComplete = false,
+  }) async {
+    await _recorder.record(_session);
+    if (!mounted || !showFinish) return;
+    final hasSomething = _recorder.recordedCount > 0;
+    if (!hasSomething && !surahComplete) return;
+    setState(() {
+      _surahComplete = surahComplete;
+      _finishVisible = true;
+    });
+  }
+
+  /// "Lanjut": teruskan latihan dari keadaan sekarang.
+  ///
+  /// Surah tamat → lanjut ke surah berikutnya (atau kembali ke daftar di akhir
+  /// mushaf). Dihentikan manual → lanjut mendengarkan lagi tanpa mengulang.
+  void _onContinue() {
+    setState(() => _finishVisible = false);
+    if (!_surahComplete) {
+      unawaited(_service.startListening());
+      return;
+    }
+    final next = widget.surahNumber + 1;
+    if (next > _totalSurahs) {
+      if (context.canPop()) context.pop();
+      return;
+    }
+    context.pushReplacement('/home/quran/murojaah/surah/$next');
+  }
+
+  /// "Ulangi surah": mulai dari ayat pertama, catatan sesi ikut direset supaya
+  /// ayat yang diulang tetap bisa memberi XP pada hari berikutnya.
+  void _onRepeat() {
+    _session.resetAll();
+    _recorder = ReciteProgressRecorder(
+      progress: widget.progress,
+      surahNumber: widget.surahNumber,
+    );
+    setState(() {
+      _finishVisible = false;
+      _surahComplete = false;
+    });
+  }
+
+  void _onPickSurah() => _pickSurah(QuranThemeScope.darkOf(context));
+
+  /// Jumlah surah dalam mushaf — batas atas "lanjut ke surah berikutnya".
+  static const _totalSurahs = 114;
 
   Future<void> _initialize() async {
     await _service.initialize();
@@ -109,360 +161,10 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     setState(() {});
   }
 
-  /// Ambil ayat dari service, hitung offset kata, dan pasang listener kata.
   void _adoptVerses() {
-    final verses = _service.verses;
-    if (verses.isEmpty || identical(verses, _verses)) return;
-    _verses = verses;
-    _wordStarts
-      ..clear()
-      ..addAll(_service.wordAyahStarts);
-    _wordSub ??= _service.wordEvents.listen(_onWord);
-    _textSub ??= _service.transcript.listen((text) {
-      _diagTranscript(text);
-      _setAsr(text);
-    });
-    setState(() {});
-  }
-
-  /// Ayat aktif punya kata merah → tombol "Ulangi" aktif.
-  bool get _activeVerseMissed {
-    if (_wordStarts.length < 2) return false;
-    final start = _wordStarts[_activeVerse];
-    final end = _wordStarts[_activeVerse + 1];
-    return _missed.any((id) => id >= start && id < end);
-  }
-
-  /// Ayat pemilik kata global [wordId] (0-based).
-  int _verseOf(int wordId) {
-    var lo = 0;
-    var hi = _verses.length - 1;
-    while (lo < hi) {
-      final mid = (lo + hi + 1) ~/ 2;
-      if (_wordStarts[mid] <= wordId) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return lo;
-  }
-
-  void _onWord(WordMatchedEvent event) {
-    if (!mounted || _verses.isEmpty) return;
-    final verse = _verseOf(event.wordId);
-
-    if (event.isRed) {
-      _diagEvent(event, verse, 'RED');
-      _onRed(event, verse);
-      return;
-    }
-
-    // Matcher menormalkan biaya salah baca per panjang kata acuan, sehingga
-    // satu fonem salah pada kata panjang tetap hijau. Periksa ulang hurufnya.
-    if (_soundsWrong(event)) {
-      _diagEvent(event, verse, 'GREEN→RED');
-      // Bunyi pengganti sudah ada di slot kata ini, jadi jangan cari kata
-      // yang dilewati: `LcsOmissionDetector` akan menuduh kata lain.
-      _onRed(event, verse, detectOmission: false);
-      return;
-    }
-    _diagEvent(event, verse, 'GREEN');
-
-    if (!_sawEvent) {
-      _sawEvent = true;
-      _log('event pertama: wordId=${event.wordId}');
-    }
-
-    setState(() {
-      _matched.add(event.wordId);
-      _missed.remove(event.wordId);
-      // Kata ini sekarang benar: bunyi lama tidak relevan lagi.
-      _asr.forgetHeard([event.wordId]);
-      if (_peekWord == event.wordId) _peekWord = null;
-      if (verse != _activeVerse) _switchVerse(verse);
-    });
-    if (_matched.length >= _service.wordPhonemes.length) {
-      unawaited(_service.stopListening());
-      _log('surah selesai: ${_matched.length} kata');
-    }
-  }
-
-  /// Kata yang dilaporkan hijau tetapi hurufnya berbeda dari acuan.
-  ///
-  /// Memakai `cleanAsr` event — potongan transkrip yang benar-benar dipakai
-  /// matcher untuk kata ini, jadi tidak perlu menyusun ulang slot dari
-  /// transkrip live.
-  bool _soundsWrong(WordMatchedEvent event) {
-    if (event.wordId < 0 || event.wordId >= _service.wordPhonemes.length) {
-      return false;
-    }
-    return isWrongReading(
-      _service.wordPhonemes[event.wordId],
-      event.cleanAsr,
-    );
-  }
-
-  /// Simpan transkrip terpanjang percobaan ini untuk [verse] — dipakai sheet
-  /// koreksi. Lihat [AsrSnapshot.keep].
-  void _keepSnapshot(int verse) => _asr.keep(verse, _asrText);
-
-  /// Terima transkrip mentah [text] dari engine.
-  ///
-  /// Transkrip satu segmen bersifat kumulatif: memuat bunyi semua ayat yang
-  /// sudah dibaca. Awalan yang sudah menjadi milik ayat sebelumnya dipotong
-  /// ([_asrOffset]) supaya slot kata ayat aktif tidak mengambilnya.
-  void _setAsr(String text) {
-    if (_asrOffset > 0 && !_segmentHolds(text)) {
-      // Engine mulai segmen baru: potongan lama tidak berlaku.
-      _asrOffset = 0;
-      _asrAnchor = '';
-    }
-    _asrRaw = text;
-    final cut = _asrOffset > text.length ? text.length : _asrOffset;
-    _asrText = cut == 0 ? text : text.substring(cut);
-  }
-
-  /// Apakah [text] masih segmen yang sama dengan saat offset dihitung?
-  ///
-  /// Dicek dari ekor potongan (dekat titik potong), bukan seluruh awalan:
-  /// hipotesis parsial boleh merevisi bagian jauh sebelumnya.
-  bool _segmentHolds(String text) {
-    if (text.length < _asrOffset || _asrAnchor.isEmpty) return false;
-    final from = _asrOffset - _asrAnchor.length;
-    return text.startsWith(_asrAnchor, from);
-  }
-
-  /// Pindah ayat aktif: simpan transkrip ayat lama, lalu potong bagiannya dari
-  /// transkrip berjalan supaya tidak terbawa ke ayat baru.
-  void _switchVerse(int verse) {
-    _keepSnapshot(_activeVerse);
-    _activeVerse = verse;
-    _syncOffset(verse);
-  }
-
-  /// Buang transkrip berjalan (percobaan baru). Offset ikut nol karena
-  /// transkrip berikutnya dimulai dari segmen baru.
-  void _resetAsr() {
-    _asrRaw = '';
-    _asrText = '';
-    _asrOffset = 0;
-  }
-
-  /// Potong awalan transkrip yang sudah dipakai kata-kata **sebelum** ayat
-  /// [verse].
-  ///
-  /// Dihitung dari seluruh kata sebelum ayat ini, bukan hanya ayat aktif
-  /// sebelumnya: event merah bisa melompat beberapa ayat sekaligus (ayat yang
-  /// dilewati) sehingga ayat-ayat di antaranya tidak pernah menjadi aktif.
-  void _syncOffset(int verse) {
-    if (_asrRaw.isEmpty) return;
-    final before = verse > 0 && verse < _wordStarts.length
-        ? _wordStarts[verse]
-        : 0;
-    if (before <= 0) {
-      _asrOffset = 0;
-    } else {
-      _asrOffset = asrConsumed(
-        phonemesPerWord: _service.wordPhonemes.sublist(0, before),
-        emitted: _asrRaw,
-      );
-    }
-    // Ekor potongan dipakai mengenali segmen yang sama pada transkrip berikut.
-    _asrAnchor = _asrOffset <= 0
-        ? ''
-        : _asrRaw.substring(max(0, _asrOffset - 8), _asrOffset);
-    _setAsr(_asrRaw);
-  }
-
-  /// Kata salah/terlupa: tandai merah, getarkan perangkat, dan cari kata yang
-  /// dilewati lewat `LcsOmissionDetector` (Best-Drop LCS).
-  ///
-  /// `WordMatchedEvent.cleanAsr` selalu kosong untuk event merah
-  /// (`DictationSequencer._commitRed`), jadi teks "terdengar" tidak diambil dari
-  /// event melainkan direkonstruksi dari transkrip ayat (`heardForWord`).
-  void _onRed(
-    WordMatchedEvent event,
-    int verse, {
-    bool detectOmission = true,
-  }) {
-    unawaited(HapticFeedback.mediumImpact());
-    // Ayat baru: potong dulu bunyi ayat sebelumnya, baru baca slot kata ini.
-    if (verse != _activeVerse) _switchVerse(verse);
-    final omitted = detectOmission ? _omittedWord(event.wordId, verse) : null;
-    // Bunyi slot dicatat **sekarang**, dari transkrip yang sedang dinilai.
-    // Menghitungnya lagi saat sheet dibuka akan memakai transkrip yang sudah
-    // bertambah (kata berikutnya) atau sudah direset percobaan lain.
-    _keepSnapshot(verse);
-    final heard = _heardAt(
-      event.wordId,
-      _asrText.isEmpty ? (_asr.textOf(verse) ?? '') : _asrText,
-    );
-    setState(() {
-      _missed.add(event.wordId);
-      _matched.remove(event.wordId);
-      _asr.recordHeard(event.wordId, heard);
-      if (omitted != null) _missed.add(omitted);
-    });
-    _log('merah wordId=${event.wordId} ayat=${verse + 1}');
-  }
-
-  /// Bunyi ASR yang menempati slot kata global [wordId] pada transkrip [text].
-  String? _heardAt(int wordId, String text) {
-    if (text.trim().isEmpty) return null;
-    final verse = _verseOf(wordId);
-    if (verse + 1 >= _wordStarts.length) return null;
-    return heardForWord(
-      phonemesPerWord: _service.wordPhonemes.sublist(
-        _wordStarts[verse],
-        _wordStarts[verse + 1],
-      ),
-      wordIndex: wordId - _wordStarts[verse],
-      emitted: text,
-    );
-  }
-
-  /// Indeks kata global yang paling mungkin dilewati, atau null.
-  ///
-  /// Memakai transkrip fonetis live sebagai `emittedPhonemes`; bila belum ada
-  /// transkrip, deteksi dilewati (tidak ada bukti).
-  int? _omittedWord(int wordId, int verse) {
-    final emitted = _asrText.trim();
-    if (emitted.isEmpty || _service.wordPhonemes.isEmpty) return null;
-    final start = _wordStarts[verse];
-    final end = _wordStarts[verse + 1];
-    final result = LcsOmissionDetector.detectOmission(
-      phonemesPerWord: _service.wordPhonemes.sublist(start, end),
-      emittedPhonemes: emitted,
-    );
-    if (!result.isOmissionDetected) return null;
-    final index = result.omittedWordIndex;
-    if (index == null) return null;
-    final global = start + index;
-    return global == wordId ? null : global;
-  }
-
-  void _log(String message) {
-    if (kDebugMode) debugPrint('[Murojaah] $message');
-  }
-
-  /// TEMP-DIAG: transkrip berubah → hitung ulang keputusan tiap kata ayat aktif
-  /// terhadap transkrip terbaru. Membuktikan apakah merah/hijau berubah saat
-  /// hasil partial menjadi final.
-  void _diagTranscript(String text) {
-    if (!kDebugMode) return;
-    if (text.isEmpty || _wordStarts.length < 2) return;
-    if (text == _diagLastText) return;
-    _diagLastText = text;
-    final verse = _activeVerse;
-    final start = _wordStarts[verse];
-    final end = _wordStarts[verse + 1];
-    final words = _service.wordPhonemes.sublist(start, end);
-    final buf = StringBuffer(
-      '[DIAG][TEXT] coba=$_diagAttempt ayah=${verse + 1} len=${text.length}',
-    );
-    for (var i = 0; i < words.length; i++) {
-      final heard = heardForWord(
-        phonemesPerWord: words,
-        wordIndex: i,
-        emitted: text,
-      );
-      final wrong = isWrongReading(words[i], heard);
-      buf.write(' | w$i wrong=$wrong slot="${heard ?? ''}"');
-    }
-    debugPrint(buf.toString());
-    debugPrint('[DIAG][TEXT] raw="$text"');
-  }
-
-  /// TEMP-DIAG: satu baris per percobaan kata — acuan, transkrip mentah,
-  /// status matcher, `cleanAsr`, hasil `isWrongReading`, dan keputusan akhir.
-  void _diagEvent(WordMatchedEvent event, int verse, String verdict) {
-    if (!kDebugMode) return;
-    final ref = _service.phonemesOf(event.wordId);
-    final start = _wordStarts[verse];
-    final local = event.wordId - start;
-    final heard = heardForWord(
-      phonemesPerWord: _service.wordPhonemes.sublist(
-        start,
-        _wordStarts[verse + 1],
-      ),
-      wordIndex: local,
-      emitted: _asrText,
-    );
-    final wrong = isWrongReading(ref, event.cleanAsr);
-    debugPrint(
-      '[DIAG][WORD] coba=$_diagAttempt ayah=${verse + 1} '
-      'w=$local/${_wordStarts[verse + 1] - start} '
-      'text="${_wordText(event.wordId)}" ref="$ref" '
-      'status=${event.isRed ? 'RED' : 'GREEN'} '
-      'score=${event.score.toStringAsFixed(3)} '
-      'cleanAsr="${event.cleanAsr}" heard="${heard ?? ''}" '
-      'isWrong=$wrong verdict=$verdict',
-    );
-    debugPrint(
-      '[DIAG][WORD] asr="$_asrText" slot="${heard ?? ''}" '
-      'slotDisplay="${heard == null ? '' : displayHeard(heard)}"',
-    );
-  }
-  /// Teks kata global [wordId] dari ayat pemiliknya.
-  ///
-  /// `wordId` mengikuti kata fonetis; jumlah kata fonetis = jumlah kata
-  /// `aya_text` per ayat, jadi offset lokal bisa dipakai langsung.
-  String _wordText(int wordId) {
-    final verse = _verseOf(wordId);
-    final words = _verses[verse].uthmaniWords;
-    final local = wordId - _wordStarts[verse];
-    return local >= 0 && local < words.length ? words[local] : '';
-  }
-
-  /// Bunyi ASR yang menempati slot kata merah [wordId], atau null bila kata
-  /// itu memang tidak diucapkan. Lihat [heardForWord].
-  ///
-  /// Nilai yang dicatat saat kata dinilai merah selalu dipakai lebih dulu;
-  /// hitung ulang hanya cadangan untuk kata yang ditandai tanpa event.
-  String? _heardOf(int wordId) {
-    if (_asr.hasHeard(wordId)) return _asr.heardOf(wordId);
-    final verse = _verseOf(wordId);
-    final text = _asr.textOf(verse);
-    if (text == null || text.trim().isEmpty) return null;
-    return heardForWord(
-      phonemesPerWord: _service.wordPhonemes.sublist(
-        _wordStarts[verse],
-        _wordStarts[verse + 1],
-      ),
-      wordIndex: wordId - _wordStarts[verse],
-      emitted: text,
-    );
-  }
-
-  /// Akurasi bacaan: benar / (benar + salah). 100% bila belum ada percobaan.
-  double get _accuracy {
-    final attempts = _matched.length + _missed.length;
-    return attempts == 0 ? 1 : _matched.length / attempts;
-  }
-
-  /// Buka satu kata berikutnya selama 2 detik (peek hint).
-  void _peek() {
-    final total = _service.wordPhonemes.length;
-    if (total == 0) return;
-    final from = _wordStarts.length > 1 ? _wordStarts[_activeVerse] : 0;
-    var target = -1;
-    for (var i = from; i < total; i++) {
-      if (!_matched.contains(i) && !_missed.contains(i)) {
-        target = i;
-        break;
-      }
-    }
-    if (target < 0) return;
-    _peekTimer?.cancel();
-    setState(() {
-      _peekWord = target;
-      _peekCount++;
-    });
-    _peekTimer = Timer(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() => _peekWord = null);
-    });
+    if (!_session.adoptVerses()) return;
+    if (!mounted) return;
+    unawaited(_maybeOnboard());
   }
 
   /// Sheet koreksi: kata yang diharapkan vs yang terdengar.
@@ -470,8 +172,8 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     unawaited(
       showReciteCorrectionSheet(
         context,
-        expected: _wordText(wordId),
-        heard: _heardOf(wordId),
+        expected: _session.wordText(wordId),
+        heard: _session.heardOf(wordId),
         dark: QuranThemeScope.darkOf(context),
       ),
     );
@@ -480,60 +182,15 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
   Future<void> _toggleListening() async {
     if (_service.status.value == ReciteMurojaahStatus.listening) {
       await _service.stopListening();
+      // Sesi berhenti = kesempatan mencatat ayat yang sudah tuntas, sekaligus
+      // menutup latihan dengan ringkasan bila ada yang tercatat.
+      await _recordProgress(showFinish: true);
       return;
     }
     if (_service.status.value == ReciteMurojaahStatus.error) {
       await _initialize();
       return;
     }
-    await _service.startListening();
-  }
-
-  /// Ulangi ayat aktif: buang tanda merah ayat ini dan kembalikan kursor
-  /// pelacakan ke kata pertama ayat tersebut.
-  ///
-  /// Kata yang sudah hijau tetap terbuka (aturan §19): kursor mundur membuat
-  /// tracker mengirim ulang event kata-kata itu, dan hasilnya sama.
-  void _retryCurrent() {
-    if (_wordStarts.length < 2) return;
-    final start = _wordStarts[_activeVerse];
-    final end = _wordStarts[_activeVerse + 1];
-    _service.rewindTo(start);
-    _diagAttempt++;
-    _log('DIAG coba=$_diagAttempt mulai ulang ayat ${_activeVerse + 1}');
-    setState(() {
-      _missed.removeWhere((id) => id >= start && id < end);
-      // Percobaan baru: transkrip & bunyi kata ayat ini dibuang supaya
-      // "terdengar" tidak memakai bacaan lama.
-      _asr.rewind(forgetWords: Iterable.generate(end - start, (i) => start + i));
-      _resetAsr();
-    });
-    unawaited(_resumeListening());
-  }
-
-  /// Kembali ke ayat pertama.
-  void _resetAll() {
-    _peekTimer?.cancel();
-    _service.rewindTo(0);
-    _diagAttempt++;
-    setState(() {
-      _activeVerse = 0;
-      _matched.clear();
-      _missed.clear();
-      _asr.rewind(forgetWords: Iterable.generate(_service.wordPhonemes.length, (i) => i));
-      _peekWord = null;
-      _peekCount = 0;
-      _resetAsr();
-    });
-    unawaited(_resumeListening());
-  }
-
-  /// Nyalakan lagi mikrofon bila sesi sebelumnya sudah berjalan tetapi berhenti
-  /// (mis. semua kata hijau memicu `stopListening`). Tanpa ini tombol Ulangi /
-  /// Reset tampak mati: kursor sudah mundur, tapi tidak ada audio masuk.
-  Future<void> _resumeListening() async {
-    if (!_sawEvent) return;
-    if (_service.status.value != ReciteMurojaahStatus.ready) return;
     await _service.startListening();
   }
 
@@ -545,28 +202,77 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
       child: Scaffold(
         backgroundColor: QuranTokens.background(dark),
         body: SafeArea(
-          child: Column(
-            children: [
-              _Header(dark: dark, title: _title, onPeek: _verses.isEmpty ? null : _peek),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _verses.isEmpty ? _placeholder(dark) : _mushaf(dark),
+          child: ListenableBuilder(
+            listenable: _session,
+            builder: (context, _) => Column(
+              children: [
+                _Header(
+                  dark: dark,
+                  title: _title,
+                  onHelp: _showHelp,
+                  onPickSurah: _session.verses.isEmpty
+                      ? null
+                      : () => _pickSurah(dark),
+                  showSubtitle: _session.verses.isNotEmpty,
                 ),
-              ),
-              _bottom(dark),
-            ],
+                Expanded(
+                  child: _finishVisible
+                      ? _finish()
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _session.verses.isEmpty
+                              ? _placeholder(dark)
+                              : _mushaf(dark),
+                        ),
+                ),
+                if (!_finishVisible) _bottom(dark),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String get _title => _verses.isEmpty
-      ? 'Murojaah'
-      : _verses.first.surahNameEn.isNotEmpty
-          ? _verses.first.surahNameEn
-          : _verses.first.surahName;
+  String get _title => _session.verses.isEmpty
+      ? 'Latihan hafalan'
+      : _session.verses.first.surahNameEn.isNotEmpty
+      ? _session.verses.first.surahNameEn
+      : _session.verses.first.surahName;
+
+  /// Panduan singkat — juga pintu untuk ganti surah.
+  void _showHelp() {
+    unawaited(
+      showReciteOnboarding(
+        context,
+        dark: QuranThemeScope.darkOf(context),
+        onChangeSurah: () {
+          // Tutup panduan, lalu buka daftar surah.
+          Navigator.of(context).maybePop();
+          unawaited(
+            showReciteSurahPicker(
+              context,
+              dark: QuranThemeScope.darkOf(context),
+              current: widget.surahNumber,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _pickSurah(bool dark) {
+    unawaited(
+      showReciteSurahPicker(context, dark: dark, current: widget.surahNumber),
+    );
+  }
+
+  /// Panduan otomatis sekali, hanya setelah ayat siap.
+  Future<void> _maybeOnboard() async {
+    if (await reciteOnboardingSeen()) return;
+    if (!mounted || _session.verses.isEmpty) return;
+    _showHelp();
+  }
 
   Widget _placeholder(bool dark) {
     return ValueListenableBuilder<ReciteMurojaahStatus>(
@@ -577,7 +283,14 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (loading) const CircularProgressIndicator(),
+              if (loading)
+                const CircularProgressIndicator()
+              else
+                Icon(
+                  Icons.cloud_off_outlined,
+                  size: 44,
+                  color: QuranTokens.textMuted(dark),
+                ),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -585,8 +298,31 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
                   status: status,
                   message: _service.errorMessage.value,
                   dark: dark,
+                  showHint: true,
                 ),
               ),
+              if (!loading) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _initialize,
+                  icon: const Icon(Icons.refresh, size: 20),
+                  label: const Text('Coba lagi'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(160, 48),
+                    backgroundColor: QuranTokens.brandColor(dark),
+                    foregroundColor: QuranTokens.onPrimaryColor(dark),
+                    textStyle: QuranTokens.poppins(
+                      const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -595,135 +331,193 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
   }
 
   Widget _mushaf(bool dark) {
-    final totalWords = _service.wordPhonemes.length;
-    final done = totalWords > 0 && _matched.length >= totalWords;
+    final totalWords = _session.totalWords;
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: totalWords == 0 ? 0 : _matched.length / totalWords,
-                  minHeight: 3,
-                  backgroundColor: QuranTokens.divider(dark),
-                  valueColor: AlwaysStoppedAnimation(
-                    QuranTokens.brandColor(dark),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${(_accuracy * 100).round()}%',
-              textDirection: TextDirection.ltr,
-              style: QuranTokens.poppins(
-                TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: QuranTokens.successColor(dark),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Angka Latin: digit Arab-Indik + "/" membentuk satu run RTL
-            // sehingga urutan terbaca terbalik walau paragraf LTR.
-            Text(
-              _peekCount == 0
-                  ? '${_matched.length} / $totalWords'
-                  : '${_matched.length} / $totalWords · $_peekCount lihat',
-              textDirection: TextDirection.ltr,
-              style: QuranTokens.poppins(
-                TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: QuranTokens.secondaryColor(dark),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
+        _progress(dark, totalWords, _session.verses.length),
+        const SizedBox(height: 6),
+        _legend(dark),
+        const SizedBox(height: 6),
         Expanded(
           child: ReciteMushaf(
-            verses: _verses,
-            matched: _matched,
-            missed: _missed,
-            activeVerse: _activeVerse,
-            peekWord: _peekWord,
+            verses: _session.verses,
+            matched: _session.matched,
+            missed: _session.missed,
+            activeVerse: _session.activeVerse,
+            peekWord: _session.peekWord,
             onWordTap: (id) {
-              if (_missed.contains(id)) _showCorrection(id);
+              if (_session.missed.contains(id)) _showCorrection(id);
             },
           ),
         ),
-        if (done) _completed(dark),
       ],
     );
   }
 
-  Widget _completed(bool dark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.check_circle, size: 18, color: QuranTokens.brandColor(dark)),
-          const SizedBox(width: 8),
+  /// Keterangan tanda: warna tidak pernah jadi satu-satunya penanda.
+  Widget _legend(bool dark) {
+    Widget item(IconData icon, String text, Color color) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: QuranTokens.poppins(TextStyle(fontSize: 14, color: color)),
+        ),
+      ],
+    );
+    return Row(
+      children: [
+        item(Icons.check_circle_outline, 'Benar', QuranTokens.correct(dark)),
+        const SizedBox(width: 14),
+        item(Icons.gesture, 'Perlu diulang', QuranTokens.wrong(dark)),
+        const Spacer(),
+        if (_session.peekCount > 0)
           Text(
-            'Surah selesai dibaca',
+            '${_session.peekCount} kali intip',
             style: QuranTokens.poppins(
-              TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: QuranTokens.inkColor(dark),
-              ),
+              TextStyle(fontSize: 14, color: QuranTokens.textMuted(dark)),
             ),
           ),
-        ],
-      ),
+      ],
+    );
+  }
+
+  /// Progres dalam kalimat biasa: "Ayat 2 dari 7 · Akurasi 96%".
+  Widget _progress(bool dark, int totalWords, int verseCount) {
+    final percent = totalWords == 0
+        ? 0.0
+        : _session.matched.length / totalWords;
+    final accuracy = (_session.accuracy * 100).round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          label: 'Ketepatan bacaan $accuracy persen dari percobaan',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: percent,
+              minHeight: 8,
+              backgroundColor: QuranTokens.border(dark),
+              valueColor: AlwaysStoppedAnimation(QuranTokens.brandColor(dark)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                totalWords == 0
+                    ? 'Menyiapkan kata…'
+                    : 'Ayat ${_session.activeVerse + 1} dari $verseCount'
+                          ' · Akurasi $accuracy%',
+                style: QuranTokens.poppins(
+                  TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: QuranTokens.inkColor(dark),
+                  ),
+                ),
+              ),
+            ),
+            ReciteActionButton(
+              icon: Icons.visibility_outlined,
+              label: 'Intip kata',
+              dark: dark,
+              compact: true,
+              onTap: _session.peek,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Layar selesai: perayaan + ringkasan + jalan keluar.
+  ///
+  /// Memakai [ReciteFinishScreen] yang sama untuk dua pemicu — surah tamat dan
+  /// sesi dihentikan manual — supaya tidak ada dua layar selesai yang berbeda
+  /// cerita.
+  Widget _finish() {
+    final total = _session.verses.length;
+    var done = 0;
+    for (var verse = 0; verse < total; verse++) {
+      if (_session.isVerseComplete(verse)) done++;
+    }
+    return ReciteFinishScreen(
+      surahName: _title,
+      versesDone: done,
+      totalVerses: total,
+      accuracyPercent: (_session.accuracy * 100).round(),
+      peekCount: _session.peekCount,
+      result: _recorder.result,
+      surahComplete: _surahComplete,
+      onContinue: _onContinue,
+      onPickSurah: _onPickSurah,
+      onRepeat: _onRepeat,
     );
   }
 
   Widget _bottom(bool dark) {
+    final grey = QuranTokens.textMuted(dark);
+    final red = QuranTokens.wrong(dark);
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
         child: ValueListenableBuilder<ReciteMurojaahStatus>(
           valueListenable: _service.status,
           builder: (context, status, _) {
             final listening = status == ReciteMurojaahStatus.listening;
-            final busy = status == ReciteMurojaahStatus.preparing ||
+            final busy =
+                status == ReciteMurojaahStatus.preparing ||
                 status == ReciteMurojaahStatus.downloadingModel;
-            final done = _service.wordPhonemes.isNotEmpty &&
-                _matched.length >= _service.wordPhonemes.length;
-            final retrying = _activeVerseMissed;
+            final done = _session.isComplete;
+            final retrying = _session.activeVerseMissed;
+            final error = status == ReciteMurojaahStatus.error;
 
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (retrying)
+                if (error)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      'Ulangi ayat ini',
-                      style: QuranTokens.poppins(
-                        TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.red.shade400,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _errorNotice(dark),
+                  )
+                else if (retrying)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 18, color: red),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Ada kata yang perlu diulang',
+                            style: QuranTokens.poppins(
+                              TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: red,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   )
-                else
+                else if (_session.verses.isNotEmpty && !done)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: ReciteStatusChip(
                       status: status,
                       message: _service.errorMessage.value,
                       dark: dark,
+                      showHint: true,
                     ),
                   ),
                 if (status == ReciteMurojaahStatus.downloadingModel)
@@ -734,48 +528,87 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
                       dark: dark,
                     ),
                   ),
-                if (done)
+                // Saat selesai, ajakan mengulang ada di kartu "selesai" di atas.
+                if (error)
                   FilledButton.icon(
-                    onPressed: _resetAll,
-                    icon: const Icon(Icons.replay, size: 18),
-                    label: const Text('Ulangi dari awal'),
+                    onPressed: _initialize,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    label: const Text('Coba lagi'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                       backgroundColor: QuranTokens.brandColor(dark),
-                      foregroundColor: Colors.white,
+                      foregroundColor: QuranTokens.onPrimaryColor(dark),
+                      textStyle: QuranTokens.poppins(
+                        const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                   )
-                else
+                else if (!done)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      ReciteIconAction(
-                        icon: Icons.restart_alt,
-                        label: 'Reset',
-                        dark: dark,
-                        onTap: _matched.isEmpty && _missed.isEmpty
-                            ? null
-                            : _resetAll,
+                      Flexible(
+                        child: ReciteActionButton(
+                          icon: Icons.restart_alt,
+                          label: 'Mulai dari awal',
+                          dark: dark,
+                          onTap:
+                              _session.matched.isEmpty &&
+                                  _session.missed.isEmpty
+                              ? null
+                              : _session.resetAll,
+                        ),
                       ),
-                      const SizedBox(width: 28),
-                      ReciteMicButton(
-                        listening: listening,
-                        enabled: !busy,
-                        dark: dark,
-                        onTap: _toggleListening,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: ReciteMicButton(
+                          listening: listening,
+                          enabled: !busy,
+                          dark: dark,
+                          onTap: _toggleListening,
+                        ),
                       ),
-                      const SizedBox(width: 28),
-                      ReciteIconAction(
-                        icon: Icons.refresh,
-                        label: 'Ulangi',
-                        dark: dark,
-                        urgency: retrying ? Colors.red.shade400 : null,
-                        onTap: retrying ? _retryCurrent : null,
+                      Flexible(
+                        child: ReciteActionButton(
+                          icon: Icons.refresh,
+                          label: 'Ulang ayat ini',
+                          dark: dark,
+                          urgency: retrying ? red : null,
+                          onTap: retrying ? _session.retryCurrentVerse : null,
+                        ),
                       ),
                     ],
+                  ),
+                if (!done && !error)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      listening
+                          ? 'Baca pelan-pelan. Kata akan terbuka sendiri.'
+                          : 'Tekan mikrofon, lalu baca ayat yang tampil.',
+                      textAlign: TextAlign.center,
+                      style: QuranTokens.poppins(
+                        TextStyle(fontSize: 14, color: grey),
+                      ),
+                    ),
+                  ),
+                if (!done && _session.missed.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'Ketuk kata bergaris merah untuk melihat koreksi.',
+                      textAlign: TextAlign.center,
+                      style: QuranTokens.poppins(
+                        TextStyle(fontSize: 14, color: grey),
+                      ),
+                    ),
                   ),
               ],
             );
@@ -784,52 +617,182 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
       ),
     );
   }
+
+  /// Pesan galat ramah; detail teknis disembunyikan di balik "Lihat detail".
+  Widget _errorNotice(bool dark) {
+    final red = QuranTokens.wrong(dark);
+    final detail = _service.errorMessage.value;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      decoration: BoxDecoration(
+        color: red.withValues(alpha: dark ? 0.14 : 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: red.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: red),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Ada masalah kecil. Coba lagi.',
+                  style: QuranTokens.poppins(
+                    TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: QuranTokens.inkColor(dark),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (detail != null && detail.isNotEmpty)
+            Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 6),
+                iconColor: QuranTokens.textMuted(dark),
+                collapsedIconColor: QuranTokens.textMuted(dark),
+                title: Text(
+                  'Lihat detail',
+                  style: QuranTokens.poppins(
+                    TextStyle(fontSize: 14, color: QuranTokens.textMuted(dark)),
+                  ),
+                ),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      detail,
+                      style: QuranTokens.poppins(
+                        TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
+                          color: QuranTokens.textMuted(dark),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
-/// Header ringkas: kembali, nama surah, peek hint, toggle tema.
+/// Header: kembali, nama surah, panduan, tema.
 class _Header extends StatelessWidget {
-  const _Header({required this.dark, required this.title, this.onPeek});
+  const _Header({
+    required this.dark,
+    required this.title,
+    required this.onHelp,
+    this.onPickSurah,
+    this.showSubtitle = false,
+  });
 
   final bool dark;
   final String title;
-  final VoidCallback? onPeek;
+  final VoidCallback onHelp;
+  final VoidCallback? onPickSurah;
+  final bool showSubtitle;
 
   @override
   Widget build(BuildContext context) {
+    final ink = QuranTokens.inkColor(dark);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.maybePop(context),
             icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-            color: QuranTokens.inkColor(dark),
+            color: ink,
             tooltip: 'Kembali',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            padding: EdgeInsets.zero,
           ),
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: QuranTokens.poppins(QuranTokens.tsAppTitle).copyWith(
-                color: QuranTokens.brandColor(dark),
+            child: Semantics(
+              button: onPickSurah != null,
+              label: onPickSurah == null
+                  ? title
+                  : '$title. Ketuk untuk memilih surah lain.',
+              child: InkWell(
+                onTap: onPickSurah,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: QuranTokens.poppins(QuranTokens.tsAppTitle)
+                                  .copyWith(
+                                    color: QuranTokens.brandColor(dark),
+                                    fontSize: 18,
+                                  ),
+                            ),
+                            if (showSubtitle)
+                              Text(
+                                'Latihan hafalan',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: QuranTokens.poppins(
+                                  TextStyle(
+                                    fontSize: 14,
+                                    color: QuranTokens.textMuted(dark),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (onPickSurah != null)
+                        Icon(
+                          Icons.unfold_more_rounded,
+                          size: 20,
+                          color: QuranTokens.brandColor(dark),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
           IconButton(
-            onPressed: onPeek,
-            icon: const Icon(Icons.visibility_outlined, size: 22),
-            color: QuranTokens.inkColor(dark),
-            tooltip: 'Lihat satu kata',
+            onPressed: onHelp,
+            icon: const Icon(Icons.help_outline, size: 22),
+            color: ink,
+            tooltip: 'Cara pakai',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            padding: EdgeInsets.zero,
           ),
           IconButton(
             onPressed: () => QuranThemeScope.toggleDark(context),
             icon: Icon(
               dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-              size: 24,
+              size: 22,
             ),
-            color: QuranTokens.inkColor(dark),
-            tooltip: 'Ganti tema',
+            color: ink,
+            tooltip: dark ? 'Mode terang' : 'Mode gelap',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            padding: EdgeInsets.zero,
           ),
         ],
       ),

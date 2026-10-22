@@ -121,8 +121,8 @@ class _ShalatPageState extends State<ShalatPage> {
               icon: const Icon(Icons.my_location),
               label: const Text('Gunakan Lokasi GPS'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: QuranTokens.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: QuranTokens.brandOf(context),
+                foregroundColor: QuranTokens.onBrandOf(context),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -226,19 +226,19 @@ class _ShalatPageState extends State<ShalatPage> {
             onTap: () => _showLokasiSelector(context, dark),
             child: Row(
               children: [
-                const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                const Icon(Icons.location_on, color: Colors.white, size: 14),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     state.lokasi,
                     style: QuranTokens.poppins(
-                      const TextStyle(fontSize: 13, color: Colors.white70),
+                      const TextStyle(fontSize: 13, color: Colors.white),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Icon(Icons.edit, color: Colors.white54, size: 14),
+                const Icon(Icons.edit, color: Colors.white, size: 14),
               ],
             ),
           ),
@@ -495,8 +495,8 @@ class _ShalatPageState extends State<ShalatPage> {
               icon: const Icon(Icons.refresh),
               label: const Text('Coba lagi'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: QuranTokens.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: QuranTokens.brandOf(context),
+                foregroundColor: QuranTokens.onBrandOf(context),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -748,7 +748,7 @@ class _CalendarDataRow extends StatelessWidget {
 
     return Container(
       color: isToday
-          ? QuranTokens.primary.withValues(alpha: 0.08)
+          ? QuranTokens.brandColor(dark).withValues(alpha: 0.08)
           : Colors.transparent,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/quran_tokens.dart';
+import '../../../murojaah/progress/activity_entry.dart';
+import '../../../murojaah/progress/progress_controller.dart';
+import '../../../murojaah/progress/reading_dwell.dart';
+import '../../../murojaah/progress/reading_log_recorder.dart';
 import '../../../presentation/widgets/quran_status_bar.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
 import '../../application/doa_controller.dart';
@@ -9,9 +13,12 @@ import '../widgets/doa_card.dart';
 
 /// Halaman list doa dengan filter chips (grup + tag), search, dan bookmark.
 class DoaListPage extends StatefulWidget {
-  const DoaListPage({super.key, required this.controller});
+  const DoaListPage({super.key, required this.controller, this.readingProgress});
 
   final DoaController controller;
+
+  /// Log aktivitas untuk mencatat "doa dibaca". Null = tidak mencatat.
+  final MurojaahProgressController? readingProgress;
 
   @override
   State<DoaListPage> createState() => _DoaListPageState();
@@ -236,6 +243,7 @@ class _DoaListPageState extends State<DoaListPage> {
               : false,
           onBookmarkTap: () => widget.controller.toggleBookmark(doa.id),
           controller: widget.controller,
+          readingProgress: widget.readingProgress,
         ),
       ),
     );
@@ -263,8 +271,8 @@ class _DoaListPageState extends State<DoaListPage> {
               icon: const Icon(Icons.refresh),
               label: const Text('Coba lagi'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: QuranTokens.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: QuranTokens.brandOf(context),
+                foregroundColor: QuranTokens.onBrandOf(context),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -305,7 +313,7 @@ class _ShimmerCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: QuranTokens.lightShimmerBase,
+              color: QuranTokens.shimmerBase(dark),
               borderRadius: BorderRadius.circular(10),
             ),
           ),
@@ -319,7 +327,7 @@ class _ShimmerCard extends StatelessWidget {
                   height: 14,
                   width: 140,
                   decoration: BoxDecoration(
-                    color: QuranTokens.lightShimmerBase,
+                    color: QuranTokens.shimmerBase(dark),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -328,7 +336,7 @@ class _ShimmerCard extends StatelessWidget {
                   height: 11,
                   width: 90,
                   decoration: BoxDecoration(
-                    color: QuranTokens.lightShimmerBase,
+                    color: QuranTokens.shimmerBase(dark),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -350,19 +358,53 @@ class DoaDetailPage extends StatefulWidget {
     required this.isBookmarked,
     required this.onBookmarkTap,
     required this.controller,
+    this.readingProgress,
   });
 
   final Doa doa;
   final bool isBookmarked;
   final VoidCallback onBookmarkTap;
   final DoaController controller;
+  final MurojaahProgressController? readingProgress;
 
   @override
   State<DoaDetailPage> createState() => _DoaDetailPageState();
 }
 
-class _DoaDetailPageState extends State<DoaDetailPage> {
+class _DoaDetailPageState extends State<DoaDetailPage>
+    with WidgetsBindingObserver {
   bool _tentangExpanded = false;
+
+  late final ReadingLogRecorder _recorder;
+
+  @override
+  void initState() {
+    super.initState();
+    _recorder = ReadingLogRecorder(
+      progress: widget.readingProgress,
+      type: ActivityType.doa,
+    );
+    WidgetsBinding.instance.addObserver(this);
+    // Seluruh isi doa tampil sekaligus di halaman detail: satu item, satu timer.
+    _recorder.enter(
+      'doa:${widget.doa.id}',
+      refId: '${widget.doa.id}',
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _recorder.handleLifecycle(state);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _recorder
+      ..flush()
+      ..dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +427,9 @@ class _DoaDetailPageState extends State<DoaDetailPage> {
                   ),
                   SliverToBoxAdapter(
                     child: _buildContent(dark),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildMarkRead(),
                   ),
                 ],
               );
@@ -447,7 +492,7 @@ class _DoaDetailPageState extends State<DoaDetailPage> {
                   style: QuranTokens.poppins(
                     const TextStyle(
                       fontSize: 14,
-                      color: Colors.white70,
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -460,7 +505,9 @@ class _DoaDetailPageState extends State<DoaDetailPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          // Chip gelap, bukan putih transparan: putih di atas
+                          // putih-20% hanya 3.4:1.
+                          color: Colors.black.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -478,6 +525,16 @@ class _DoaDetailPageState extends State<DoaDetailPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Tombol "Tandai sudah dibaca" — ikon + label, tinggi ≥48 px.
+  Widget _buildMarkRead() {
+    return MarkReadButton(
+      onPressed: () {
+        _recorder.markVisibleAsRead();
+        _recorder.flush();
+      },
     );
   }
 
@@ -555,8 +612,9 @@ class _DoaDetailPageState extends State<DoaDetailPage> {
                   setState(() => _tentangExpanded = !_tentangExpanded),
               child: Row(
                 children: [
-                  _SectionLabel(label: 'Keterangan & Dalil', dark: dark),
-                  const Spacer(),
+                  Expanded(
+                    child: _SectionLabel(label: 'Keterangan & Dalil', dark: dark),
+                  ),
                   Icon(
                     _tentangExpanded
                         ? Icons.keyboard_arrow_up

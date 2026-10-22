@@ -78,7 +78,7 @@ class _SplashText extends StatelessWidget {
         Text(
           'Quran App',
           style: QuranTokens.poppins(QuranTokens.tsSplashTitle)
-              .copyWith(color: QuranTokens.primary),
+              .copyWith(color: QuranTokens.brandColor(dark)),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -95,7 +95,11 @@ class _SplashText extends StatelessWidget {
   }
 }
 
-/// Tombol "Get Started" (Figma #1102:973: 185×60, radius 30, fill peach).
+/// Tombol "Get Started" (185×60, radius 30, isi warna brand).
+///
+/// Latar memakai [QuranTokens.brandColor], bukan peach lama: putih di atas
+/// #F9B091 hanya 1.8:1, gagal WCAG. Brand + [QuranTokens.onPrimaryColor]
+/// memberi 6.41:1 (terang) dan 7.86:1 (gelap).
 class _GetStartedButton extends StatelessWidget {
   const _GetStartedButton({required this.onTap});
 
@@ -103,8 +107,9 @@ class _GetStartedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = QuranThemeScope.darkOf(context);
     return Material(
-      color: QuranTokens.peach,
+      color: QuranTokens.brandColor(dark),
       borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
       child: InkWell(
         onTap: onTap,
@@ -116,7 +121,7 @@ class _GetStartedButton extends StatelessWidget {
           child: Text(
             'Get Started',
             style: QuranTokens.poppins(QuranTokens.tsButtonLarge)
-                .copyWith(color: Colors.white),
+                .copyWith(color: QuranTokens.onPrimaryColor(dark)),
           ),
         ),
       ),

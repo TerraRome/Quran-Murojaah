@@ -75,6 +75,10 @@ void main() {
     await t.pumpAndSettle();
 
     expect(find.byType(ReciteCorrectionSheet), findsOneWidget);
+    // "Terdengar" opsional: disembunyikan sampai user minta.
+    expect(find.text('كتب'), findsNothing);
+    await t.tap(find.text('Lihat yang terdengar'));
+    await t.pumpAndSettle();
     expect(find.text('كتب'), findsOneWidget);
     expect(find.text('tidak terdengar'), findsNothing);
   });
@@ -93,6 +97,9 @@ void main() {
           .first,
     );
     await t.tapAt(Offset(rect.right - 12, rect.top + 20));
+    await t.pumpAndSettle();
+
+    await t.tap(find.text('Lihat yang terdengar'));
     await t.pumpAndSettle();
 
     final shown = displayHeard(raw);
@@ -133,7 +140,9 @@ void main() {
     await t.tapAt(Offset(rect.right - 12, rect.top + 20));
     await t.pumpAndSettle();
 
-    expect(find.text('tidak terdengar'), findsOneWidget);
+    // Tanpa bunyi sama sekali: tidak ada bagian "Terdengar" untuk dibuka.
+    expect(find.text('Lihat yang terdengar'), findsNothing);
+    expect(find.textContaining('belum terbaca'), findsOneWidget);
   });
 
   testWidgets('percobaan kedua menampilkan bunyi percobaan kedua', (t) async {
@@ -200,6 +209,8 @@ void main() {
     await t.pumpAndSettle();
 
     expect(find.byType(ReciteCorrectionSheet), findsOneWidget);
+    await t.tap(find.text('Lihat yang terdengar'));
+    await t.pumpAndSettle();
     expect(find.text('كَتَبَ'), findsOneWidget);
     expect(find.text('ججا'), findsNothing);
   });

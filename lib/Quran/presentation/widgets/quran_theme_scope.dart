@@ -1,22 +1,43 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/font_size_store.dart';
+import '../../data/theme_store.dart';
 
 /// Mode gelap/terang bersama + ukuran font untuk semua halaman bertema "quran".
 class QuranThemeController extends ChangeNotifier {
-  QuranThemeController();
+  QuranThemeController({
+    FontSizeStore fontSizeStore = const FontSizeStore(),
+    ThemeStore themeStore = const ThemeStore(),
+  }) : _store = fontSizeStore,
+       _themeStore = themeStore;
 
   bool _dark = false;
   double _arabicFontSize = FontSizeStore.defaultArabic;
   double _translationFontSize = FontSizeStore.defaultTranslation;
-  final FontSizeStore _store = const FontSizeStore();
+  final FontSizeStore _store;
+  final ThemeStore _themeStore;
 
   bool get dark => _dark;
   double get arabicFontSize => _arabicFontSize;
   double get translationFontSize => _translationFontSize;
 
+  /// Balik mode dan simpan pilihannya.
+  ///
+  /// Tema langsung berubah (tidak menunggu tulis prefs) supaya tombol terasa
+  /// seketika; kegagalan penyimpanan tidak boleh membatalkan perubahan.
   void toggle() {
     _dark = !_dark;
+    notifyListeners();
+    unawaited(_themeStore.saveDark(_dark));
+  }
+
+  /// Muat pilihan tema dan ukuran font dari SharedPreferences.
+  Future<void> load() async {
+    _dark = await _themeStore.loadDark();
+    _arabicFontSize = await _store.loadArabic();
+    _translationFontSize = await _store.loadTranslation();
     notifyListeners();
   }
 
@@ -93,7 +114,9 @@ class _QuranThemeScopeState extends State<QuranThemeScope> {
   @override
   void initState() {
     super.initState();
-    _controller.loadFontSizes();
+    // Tema ikut dipulihkan saat startup: mode gelap tidak boleh hilang setelah
+    // aplikasi ditutup.
+    _controller.load();
   }
 
   @override

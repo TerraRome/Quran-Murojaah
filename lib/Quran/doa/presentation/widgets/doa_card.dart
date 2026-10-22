@@ -113,6 +113,8 @@ class _DoaNumberBadge extends StatelessWidget {
       child: Text(
         '$id',
         style: QuranTokens.poppins(
+          // Badge ini selalu berlatar gradient gelap (bukan brandColor), jadi
+          // putih tetap pilihan benar di kedua mode: 4.85:1 di stop terang.
           const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,

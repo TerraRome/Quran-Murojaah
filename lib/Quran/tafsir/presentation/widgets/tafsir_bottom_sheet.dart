@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../data/quran_tokens.dart';
 import '../../../domain/entities/verse.dart';
+import '../../../murojaah/progress/activity_entry.dart';
+import '../../../murojaah/progress/progress_controller.dart';
+import '../../../murojaah/progress/reading_dwell.dart';
+import '../../../murojaah/progress/reading_log_recorder.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
 import '../../application/tafsir_controller.dart';
 
@@ -12,13 +16,14 @@ import '../../application/tafsir_controller.dart';
 /// - Navigasi prev/next ayat tanpa tutup sheet
 /// - Loading shimmer + error state
 /// - Drag handle untuk dismiss
-class TafsirBottomSheet extends StatelessWidget {
+class TafsirBottomSheet extends StatefulWidget {
   const TafsirBottomSheet({
     super.key,
     required this.controller,
     required this.verses,
     required this.surahNumber,
     required this.totalAyat,
+    this.readingProgress,
   });
 
   final TafsirController controller;
@@ -28,12 +33,16 @@ class TafsirBottomSheet extends StatelessWidget {
   final int surahNumber;
   final int totalAyat;
 
+  /// Log aktivitas untuk mencatat "tafsir dibaca". Null = tidak mencatat.
+  final MurojaahProgressController? readingProgress;
+
   static Future<void> show({
     required BuildContext context,
     required TafsirController controller,
     required List<Verse> verses,
     required int surahNumber,
     required int totalAyat,
+    MurojaahProgressController? readingProgress,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -44,8 +53,69 @@ class TafsirBottomSheet extends StatelessWidget {
         verses: verses,
         surahNumber: surahNumber,
         totalAyat: totalAyat,
+        readingProgress: readingProgress,
       ),
     );
+  }
+
+  @override
+  State<TafsirBottomSheet> createState() => _TafsirBottomSheetState();
+}
+
+class _TafsirBottomSheetState extends State<TafsirBottomSheet>
+    with WidgetsBindingObserver {
+  late final ReadingLogRecorder _recorder;
+  int _activeAyat = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _recorder = ReadingLogRecorder(
+      progress: widget.readingProgress,
+      type: ActivityType.tafsir,
+    );
+    WidgetsBinding.instance.addObserver(this);
+    widget.controller.addListener(_syncActiveAyat);
+    _syncActiveAyat();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _recorder.handleLifecycle(state);
+  }
+
+  /// Satu ayat = satu item. Pindah ayat menutup item lama (kredit bila sudah
+  /// lewat ambang) dan membuka item baru.
+  void _syncActiveAyat() {
+    final state = widget.controller.value;
+    final ayat = state is TafsirLoaded && state.activeTafsir != null
+        ? state.activeAyat
+        : 0;
+    if (ayat == _activeAyat) return;
+    if (_activeAyat > 0) _recorder.leave('tafsir:$_activeAyat');
+    _activeAyat = ayat;
+    if (ayat > 0) {
+      _recorder.enter(
+        'tafsir:$ayat',
+        surahNumber: widget.surahNumber,
+        verse: ayat,
+      );
+    }
+  }
+
+  void _markRead() {
+    _recorder.markVisibleAsRead();
+    _recorder.flush();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_syncActiveAyat);
+    WidgetsBinding.instance.removeObserver(this);
+    _recorder
+      ..flush()
+      ..dispose();
+    super.dispose();
   }
 
   @override
@@ -80,21 +150,24 @@ class TafsirBottomSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: ValueListenableBuilder<TafsirState>(
-                valueListenable: controller,
+                valueListenable: widget.controller,
                 builder: (_, state, __) {
                   final ayat = state is TafsirLoaded ? state.activeAyat : 0;
                   return Row(
                     children: [
-                      Text(
-                        ayat > 0 ? 'Tafsir Ayat $ayat' : 'Tafsir',
-                        style: QuranTokens.poppins(
-                          const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ).copyWith(color: QuranTokens.inkColor(dark)),
+                      // Expanded, bukan Spacer: judul boleh membungkus saat teks
+                      // diperbesar, bukan meluber keluar layar.
+                      Expanded(
+                        child: Text(
+                          ayat > 0 ? 'Tafsir Ayat $ayat' : 'Tafsir',
+                          style: QuranTokens.poppins(
+                            const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ).copyWith(color: QuranTokens.inkColor(dark)),
+                        ),
                       ),
-                      const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: Icon(
@@ -113,7 +186,7 @@ class TafsirBottomSheet extends StatelessWidget {
             // Content
             Expanded(
               child: ValueListenableBuilder<TafsirState>(
-                valueListenable: controller,
+                valueListenable: widget.controller,
                 builder: (_, state, __) {
                   return switch (state) {
                     TafsirIdle() => const SizedBox.shrink(),
@@ -122,12 +195,13 @@ class TafsirBottomSheet extends StatelessWidget {
                       _ErrorView(message: message, dark: dark),
                     TafsirLoaded() => _ContentView(
                         state: state,
-                        verses: verses,
-                        surahNumber: surahNumber,
-                        totalAyat: totalAyat,
-                        controller: controller,
+                        verses: widget.verses,
+                        surahNumber: widget.surahNumber,
+                        totalAyat: widget.totalAyat,
+                        controller: widget.controller,
                         scrollController: scrollController,
                         dark: dark,
+                        onMarkRead: _markRead,
                       ),
                   };
                 },
@@ -149,6 +223,7 @@ class _ContentView extends StatelessWidget {
     required this.controller,
     required this.scrollController,
     required this.dark,
+    required this.onMarkRead,
   });
 
   final TafsirLoaded state;
@@ -158,6 +233,7 @@ class _ContentView extends StatelessWidget {
   final TafsirController controller;
   final ScrollController scrollController;
   final bool dark;
+  final VoidCallback onMarkRead;
 
   @override
   Widget build(BuildContext context) {
@@ -212,18 +288,26 @@ class _ContentView extends StatelessWidget {
                   ),
 
                 const SizedBox(height: 16),
+                // Navigasi ikut menggulir: dengan teks diperbesar, bar navigasi
+                // lebih tinggi dari sisa ruang dan akan menutupi teks tafsir
+                // bila dipatok di bawah.
+                _NavigationBar(
+                  state: state,
+                  totalAyat: totalAyat,
+                  controller: controller,
+                  dark: dark,
+                ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
         ),
 
-        // Navigasi prev/next
+        // Aksi utama tetap terlihat tanpa menggulir.
         Divider(height: 1, color: QuranTokens.listDivider(dark)),
-        _NavigationBar(
-          state: state,
-          totalAyat: totalAyat,
-          controller: controller,
-          dark: dark,
+        MarkReadButton(
+          onPressed: onMarkRead,
+          label: 'Tandai tafsir ini sudah dibaca',
         ),
       ],
     );
@@ -258,15 +342,29 @@ class _NavigationBar extends StatelessWidget {
           children: [
             // Prev
             Expanded(
-              child: TextButton.icon(
+              child: TextButton(
                 onPressed: hasPrev ? controller.prevAyat : null,
-                icon: Icon(Icons.arrow_back_ios_new, size: 14,
-                    color: hasPrev ? brand : disabled),
-                label: Text(
-                  'Ayat Sebelumnya',
-                  style: QuranTokens.poppins(
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  ).copyWith(color: hasPrev ? brand : disabled),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.arrow_back_ios_new,
+                      size: 14,
+                      color: hasPrev ? brand : disabled,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Ayat Sebelumnya',
+                        style: QuranTokens.poppins(
+                          const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ).copyWith(color: hasPrev ? brand : disabled),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -288,16 +386,30 @@ class _NavigationBar extends StatelessWidget {
 
             // Next
             Expanded(
-              child: TextButton.icon(
+              child: TextButton(
                 onPressed: hasNext ? () => controller.nextAyat(totalAyat) : null,
-                icon: Text(
-                  'Ayat Berikutnya',
-                  style: QuranTokens.poppins(
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  ).copyWith(color: hasNext ? brand : disabled),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Ayat Berikutnya',
+                        style: QuranTokens.poppins(
+                          const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ).copyWith(color: hasNext ? brand : disabled),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: hasNext ? brand : disabled,
+                    ),
+                  ],
                 ),
-                label: Icon(Icons.arrow_forward_ios, size: 14,
-                    color: hasNext ? brand : disabled),
               ),
             ),
           ],

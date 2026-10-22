@@ -152,13 +152,18 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
+                          color: QuranTokens.wrongOf(
+                            context,
+                          ).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           _error!,
                           style: QuranTokens.poppins(
-                            const TextStyle(fontSize: 13, color: Colors.red),
+                            TextStyle(
+                              fontSize: 13,
+                              color: QuranTokens.wrongOf(context),
+                            ),
                           ),
                         ),
                       ),
@@ -235,10 +240,10 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                             ? _onConfirm
                             : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: QuranTokens.primary,
-                          foregroundColor: Colors.white,
+                          backgroundColor: QuranTokens.brandOf(context),
+                          foregroundColor: QuranTokens.onBrandOf(context),
                           disabledBackgroundColor:
-                              QuranTokens.primary.withValues(alpha: 0.4),
+                              QuranTokens.brandOf(context).withValues(alpha: 0.4),
                           padding:
                               const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(

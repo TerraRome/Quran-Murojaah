@@ -93,7 +93,7 @@ class SurahHeaderCard extends StatelessWidget {
                   surah.translation,
                   textAlign: TextAlign.center,
                   style: QuranTokens.poppins(QuranTokens.tsDetailMeaning)
-                      .copyWith(color: Colors.white.withValues(alpha: 0.8)),
+                      .copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: QuranTokens.space7),
                 FractionallySizedBox(
@@ -107,11 +107,15 @@ class SurahHeaderCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _MetaText(text: surah.revelationType.label),
+                    Flexible(
+                      child: _MetaText(text: surah.revelationType.label),
+                    ),
                     const SizedBox(width: 6),
                     const _Dot(),
                     const SizedBox(width: 6),
-                    _MetaText(text: '${surah.totalVerses} Ayat'),
+                    Flexible(
+                      child: _MetaText(text: '${surah.totalVerses} Ayat'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: QuranTokens.space8),
@@ -167,7 +171,7 @@ class _MurottalActionButton extends StatelessWidget {
         child: OutlinedButton.icon(
           onPressed: onTap,
           style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white.withValues(alpha: 0.7),
+            foregroundColor: Colors.white,
             side: BorderSide(
                 color: Colors.white.withValues(alpha: 0.4), width: 1.5),
             shape: RoundedRectangleBorder(
@@ -180,7 +184,7 @@ class _MurottalActionButton extends StatelessWidget {
             child: CircularProgressIndicator(
               value: percent != null ? percent / 100 : null,
               strokeWidth: 2,
-              color: Colors.white.withValues(alpha: 0.7),
+              color: Colors.white,
             ),
           ),
           label: Text(

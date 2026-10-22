@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -62,32 +61,6 @@ class _MurojaahPageState extends State<MurojaahPage> {
                   ),
                 ),
               ),
-              if (kDebugMode)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.mic),
-                      label: const Text('[DEV] Audio Capture POC'),
-                      onPressed: () => context.push(
-                        '/home/quran/murojaah/audio-capture-poc',
-                      ),
-                    ),
-                  ),
-                ),
-              if (kDebugMode)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.graphic_eq),
-                      label: const Text('[DEV] VAD POC'),
-                      onPressed: () => context.push(
-                        '/home/quran/murojaah/vad-poc',
-                      ),
-                    ),
-                  ),
-                ),
               ..._buildList(state, dark),
             ],
           ),

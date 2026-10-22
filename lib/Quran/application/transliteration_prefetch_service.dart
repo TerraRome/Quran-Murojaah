@@ -1,6 +1,6 @@
 import '../data/datasources/equran_remote_datasource.dart';
 import '../data/datasources/transliteration_local_datasource.dart';
-import '../murojaah/application/arabic_matcher.dart';
+import 'latin_normalizer.dart';
 
 /// Service yang men-prefetch transliteration (teksLatin) semua 114 surah
 /// dari API equran.id saat app pertama kali boot, lalu menyimpannya ke cache
@@ -98,7 +98,7 @@ class TransliterationPrefetchService {
         verseNum,
         (
           transliteration: latin,
-          normalizedText: ArabicMatcher.normalizeLatin(latin),
+          normalizedText: normalizeLatin(latin),
         ),
       ),
     );

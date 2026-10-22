@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/surah.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/verse.dart';
-import 'package:flutter_portfolio/Quran/presentation/widgets/surah_header_card.dart';
+import 'package:quran/Quran/domain/entities/surah.dart';
+import 'package:quran/Quran/domain/entities/verse.dart';
+import 'package:quran/Quran/presentation/widgets/surah_header_card.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 

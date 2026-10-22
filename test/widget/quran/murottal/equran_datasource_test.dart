@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:dio/dio.dart';
 
-import 'package:flutter_portfolio/Quran/data/datasources/equran_remote_datasource.dart';
-import 'package:flutter_portfolio/Quran/data/models/surah_audio_model.dart';
-import 'package:flutter_portfolio/Quran/data/models/tafsir_response_model.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/qari.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/tafsir.dart';
+import 'package:quran/Quran/data/datasources/equran_remote_datasource.dart';
+import 'package:quran/Quran/data/models/surah_audio_model.dart';
+import 'package:quran/Quran/data/models/tafsir_response_model.dart';
+import 'package:quran/Quran/domain/entities/qari.dart';
+import 'package:quran/Quran/domain/entities/tafsir.dart';
 
 class MockDio extends Mock implements Dio {}
 class MockHttpClientAdapter extends Mock implements HttpClientAdapter {}

@@ -1,16 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_portfolio/Quran/application/quran_controller.dart';
-import 'package:flutter_portfolio/Quran/data/last_read_store.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/surah.dart';
-import 'package:flutter_portfolio/Quran/domain/entities/verse.dart';
-import 'package:flutter_portfolio/Quran/domain/failures/quran_failure.dart';
-import 'package:flutter_portfolio/Quran/domain/repositories/quran_repository.dart';
-import 'package:flutter_portfolio/Quran/presentation/pages/quran_home_page.dart';
-import 'package:flutter_portfolio/Quran/presentation/widgets/quran_theme_scope.dart';
+import 'package:quran/Quran/application/quran_controller.dart';
+import 'package:quran/Quran/doa/application/doa_controller.dart';
+import 'package:quran/Quran/doa/data/datasources/doa_local_datasource.dart';
+import 'package:quran/Quran/doa/data/datasources/doa_remote_datasource.dart';
+import 'package:quran/Quran/doa/data/models/doa_model.dart';
+import 'package:quran/Quran/shalat/application/location_service.dart';
+import 'package:quran/Quran/shalat/application/shalat_controller.dart';
+import 'package:quran/Quran/shalat/data/datasources/shalat_local_datasource.dart';
+import 'package:quran/Quran/shalat/data/datasources/shalat_remote_datasource.dart';
+import 'package:quran/Quran/shalat/data/models/jadwal_shalat_model.dart';
+import 'package:quran/Quran/data/last_read_store.dart';
+import 'package:quran/Quran/domain/entities/surah.dart';
+import 'package:quran/Quran/domain/entities/verse.dart';
+import 'package:quran/Quran/domain/failures/quran_failure.dart';
+import 'package:quran/Quran/domain/repositories/quran_repository.dart';
+import 'package:quran/Quran/presentation/pages/quran_home_page.dart';
+import 'package:quran/Quran/presentation/widgets/quran_theme_scope.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _FakeDoaRemote implements DoaRemoteDataSource {
+  @override
+  Future<List<DoaModel>> getDoas() async => const [];
+
+  @override
+  Future<DoaModel> getDoaDetail(int id) => throw UnimplementedError();
+}
+
+class _FakeShalatRemote implements ShalatRemoteDataSource {
+  @override
+  Future<List<String>> getProvinsi() async => const [];
+
+  @override
+  Future<List<String>> getKabkota(String provinsi) async => const [];
+
+  @override
+  Future<JadwalShalatModel> getJadwalShalat({
+    required String provinsi,
+    required String kabkota,
+    int? bulan,
+    int? tahun,
+  }) =>
+      throw UnimplementedError();
+}
 
 class _FakeQuranRepository implements QuranRepository {
   _FakeQuranRepository(this.surahs);
@@ -81,7 +115,20 @@ void main() {
 
     await tester.pumpWidget(
       QuranThemeScope(
-        child: MaterialApp(home: QuranHomePage(controller: controller)),
+        child: MaterialApp(
+          home: QuranHomePage(
+            controller: controller,
+            doaController: DoaController(
+              remote: _FakeDoaRemote(),
+              local: DoaLocalDataSource(),
+            ),
+            shalatController: ShalatController(
+              remote: _FakeShalatRemote(),
+              local: ShalatLocalDataSource(),
+              locationService: LocationService(),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -117,7 +164,20 @@ void main() {
 
     await tester.pumpWidget(
       QuranThemeScope(
-        child: MaterialApp(home: QuranHomePage(controller: controller)),
+        child: MaterialApp(
+          home: QuranHomePage(
+            controller: controller,
+            doaController: DoaController(
+              remote: _FakeDoaRemote(),
+              local: DoaLocalDataSource(),
+            ),
+            shalatController: ShalatController(
+              remote: _FakeShalatRemote(),
+              local: ShalatLocalDataSource(),
+              locationService: LocationService(),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_portfolio/Quran/presentation/pages/font_size_settings.dart';
-import 'package:flutter_portfolio/Quran/presentation/widgets/quran_theme_scope.dart';
+import 'package:quran/Quran/presentation/pages/font_size_settings.dart';
+import 'package:quran/Quran/presentation/widgets/quran_theme_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

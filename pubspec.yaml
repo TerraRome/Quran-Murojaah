@@ -55,8 +55,6 @@ dependencies:
   path_provider: ^2.1.5
   xml: ^6.5.0
   connectivity_plus: ^7.3.1
-  speech_to_text: ^7.4.0
-
   # TTS
   flutter_tts: ^4.2.5
 
@@ -66,14 +64,13 @@ dependencies:
   record: ^6.2.1
 
   # ONNX Inference
-  flutter_onnxruntime: ^1.8.3
-
   # Location (Shalat)
   geolocator: ^13.0.2
   geocoding: ^3.0.0
 
   # Notifications
   flutter_local_notifications: ^19.5.0
+  recite_quran: ^1.0.5
 
 dev_dependencies:
   flutter_test:
@@ -98,9 +95,9 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/model/zipformer_p_arabic_v3.int8.onnx
     - assets/fonts/
     - assets/icons/
     - assets/images/
     - assets/quran/
-    - assets/models/
     - docs/quran/murojaah/poc/samples/

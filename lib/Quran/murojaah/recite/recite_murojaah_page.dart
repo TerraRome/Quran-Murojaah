@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,8 +9,11 @@ import 'package:recite_quran/recite_quran.dart';
 import '../../data/quran_tokens.dart';
 import '../../presentation/widgets/quran_status_bar.dart';
 import '../../presentation/widgets/quran_theme_scope.dart';
+import 'asr_snapshot.dart';
+import 'heard_word.dart';
 import 'recite_murojaah_service.dart';
 import 'widgets/recite_controls.dart';
+import 'widgets/recite_correction_sheet.dart';
 import 'widgets/recite_mushaf.dart';
 
 /// Halaman Murojaah baru: mushaf tersembunyi yang terbuka ayat demi ayat
@@ -40,8 +44,8 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
   /// Kata global yang salah / terlupa (merah).
   final Set<int> _missed = {};
 
-  /// Teks yang terdengar (ASR) saat kata ditandai merah — bahan sheet koreksi.
-  final Map<int, String> _heard = {};
+  /// Transkrip ASR per ayat + bunyi tiap kata merah, terikat ke satu percobaan.
+  final AsrSnapshot _asr = AsrSnapshot();
 
   /// Kata yang sedang dibuka sementara (peek hint) + jumlah peek.
   int? _peekWord;
@@ -52,8 +56,28 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
   /// bahan `LcsOmissionDetector`.
   String _asrText = '';
 
+  /// Panjang awalan [_asrRaw] yang sudah menjadi milik ayat-ayat sebelumnya.
+  ///
+  /// Transkrip kumulatif satu segmen memuat semua ayat yang sudah dibaca. Tanpa
+  /// offset ini, kata pertama ayat baru bisa mendapat slot dari bunyi ayat lama
+  /// (sheet koreksi menampilkan bacaan ayat 1 untuk kata ayat 7).
+  int _asrOffset = 0;
+
+  /// Transkrip penuh segmen aktif, sebelum dipotong [_asrOffset].
+  String _asrRaw = '';
+
+  /// Awalan [_asrRaw] saat [_asrOffset] dihitung. Bila transkrip berikutnya
+  /// tidak lagi berawalan sama, engine memulai segmen baru dan offset gugur.
+  String _asrAnchor = '';
+
   int _activeVerse = 0;
   bool _sawEvent = false;
+
+  /// TEMP-DIAG: nomor percobaan, naik setiap Ulangi/Reset.
+  int _diagAttempt = 0;
+
+  /// TEMP-DIAG: transkrip terakhir yang sudah dilaporkan (hindari duplikat).
+  String _diagLastText = '';
 
   @override
   void initState() {
@@ -94,7 +118,10 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
       ..clear()
       ..addAll(_service.wordAyahStarts);
     _wordSub ??= _service.wordEvents.listen(_onWord);
-    _textSub ??= _service.transcript.listen((text) => _asrText = text);
+    _textSub ??= _service.transcript.listen((text) {
+      _diagTranscript(text);
+      _setAsr(text);
+    });
     setState(() {});
   }
 
@@ -126,9 +153,21 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     final verse = _verseOf(event.wordId);
 
     if (event.isRed) {
+      _diagEvent(event, verse, 'RED');
       _onRed(event, verse);
       return;
     }
+
+    // Matcher menormalkan biaya salah baca per panjang kata acuan, sehingga
+    // satu fonem salah pada kata panjang tetap hijau. Periksa ulang hurufnya.
+    if (_soundsWrong(event)) {
+      _diagEvent(event, verse, 'GREEN→RED');
+      // Bunyi pengganti sudah ada di slot kata ini, jadi jangan cari kata
+      // yang dilewati: `LcsOmissionDetector` akan menuduh kata lain.
+      _onRed(event, verse, detectOmission: false);
+      return;
+    }
+    _diagEvent(event, verse, 'GREEN');
 
     if (!_sawEvent) {
       _sawEvent = true;
@@ -138,10 +177,10 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     setState(() {
       _matched.add(event.wordId);
       _missed.remove(event.wordId);
-      _heard.remove(event.wordId);
+      // Kata ini sekarang benar: bunyi lama tidak relevan lagi.
+      _asr.forgetHeard([event.wordId]);
       if (_peekWord == event.wordId) _peekWord = null;
-      if (verse != _activeVerse) _asrText = '';
-      _activeVerse = verse;
+      if (verse != _activeVerse) _switchVerse(verse);
     });
     if (_matched.length >= _service.wordPhonemes.length) {
       unawaited(_service.stopListening());
@@ -149,20 +188,138 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     }
   }
 
+  /// Kata yang dilaporkan hijau tetapi hurufnya berbeda dari acuan.
+  ///
+  /// Memakai `cleanAsr` event — potongan transkrip yang benar-benar dipakai
+  /// matcher untuk kata ini, jadi tidak perlu menyusun ulang slot dari
+  /// transkrip live.
+  bool _soundsWrong(WordMatchedEvent event) {
+    if (event.wordId < 0 || event.wordId >= _service.wordPhonemes.length) {
+      return false;
+    }
+    return isWrongReading(
+      _service.wordPhonemes[event.wordId],
+      event.cleanAsr,
+    );
+  }
+
+  /// Simpan transkrip terpanjang percobaan ini untuk [verse] — dipakai sheet
+  /// koreksi. Lihat [AsrSnapshot.keep].
+  void _keepSnapshot(int verse) => _asr.keep(verse, _asrText);
+
+  /// Terima transkrip mentah [text] dari engine.
+  ///
+  /// Transkrip satu segmen bersifat kumulatif: memuat bunyi semua ayat yang
+  /// sudah dibaca. Awalan yang sudah menjadi milik ayat sebelumnya dipotong
+  /// ([_asrOffset]) supaya slot kata ayat aktif tidak mengambilnya.
+  void _setAsr(String text) {
+    if (_asrOffset > 0 && !_segmentHolds(text)) {
+      // Engine mulai segmen baru: potongan lama tidak berlaku.
+      _asrOffset = 0;
+      _asrAnchor = '';
+    }
+    _asrRaw = text;
+    final cut = _asrOffset > text.length ? text.length : _asrOffset;
+    _asrText = cut == 0 ? text : text.substring(cut);
+  }
+
+  /// Apakah [text] masih segmen yang sama dengan saat offset dihitung?
+  ///
+  /// Dicek dari ekor potongan (dekat titik potong), bukan seluruh awalan:
+  /// hipotesis parsial boleh merevisi bagian jauh sebelumnya.
+  bool _segmentHolds(String text) {
+    if (text.length < _asrOffset || _asrAnchor.isEmpty) return false;
+    final from = _asrOffset - _asrAnchor.length;
+    return text.startsWith(_asrAnchor, from);
+  }
+
+  /// Pindah ayat aktif: simpan transkrip ayat lama, lalu potong bagiannya dari
+  /// transkrip berjalan supaya tidak terbawa ke ayat baru.
+  void _switchVerse(int verse) {
+    _keepSnapshot(_activeVerse);
+    _activeVerse = verse;
+    _syncOffset(verse);
+  }
+
+  /// Buang transkrip berjalan (percobaan baru). Offset ikut nol karena
+  /// transkrip berikutnya dimulai dari segmen baru.
+  void _resetAsr() {
+    _asrRaw = '';
+    _asrText = '';
+    _asrOffset = 0;
+  }
+
+  /// Potong awalan transkrip yang sudah dipakai kata-kata **sebelum** ayat
+  /// [verse].
+  ///
+  /// Dihitung dari seluruh kata sebelum ayat ini, bukan hanya ayat aktif
+  /// sebelumnya: event merah bisa melompat beberapa ayat sekaligus (ayat yang
+  /// dilewati) sehingga ayat-ayat di antaranya tidak pernah menjadi aktif.
+  void _syncOffset(int verse) {
+    if (_asrRaw.isEmpty) return;
+    final before = verse > 0 && verse < _wordStarts.length
+        ? _wordStarts[verse]
+        : 0;
+    if (before <= 0) {
+      _asrOffset = 0;
+    } else {
+      _asrOffset = asrConsumed(
+        phonemesPerWord: _service.wordPhonemes.sublist(0, before),
+        emitted: _asrRaw,
+      );
+    }
+    // Ekor potongan dipakai mengenali segmen yang sama pada transkrip berikut.
+    _asrAnchor = _asrOffset <= 0
+        ? ''
+        : _asrRaw.substring(max(0, _asrOffset - 8), _asrOffset);
+    _setAsr(_asrRaw);
+  }
+
   /// Kata salah/terlupa: tandai merah, getarkan perangkat, dan cari kata yang
   /// dilewati lewat `LcsOmissionDetector` (Best-Drop LCS).
-  void _onRed(WordMatchedEvent event, int verse) {
+  ///
+  /// `WordMatchedEvent.cleanAsr` selalu kosong untuk event merah
+  /// (`DictationSequencer._commitRed`), jadi teks "terdengar" tidak diambil dari
+  /// event melainkan direkonstruksi dari transkrip ayat (`heardForWord`).
+  void _onRed(
+    WordMatchedEvent event,
+    int verse, {
+    bool detectOmission = true,
+  }) {
     unawaited(HapticFeedback.mediumImpact());
-    final omitted = _omittedWord(event.wordId, verse);
-    final heard = event.cleanAsr.trim();
+    // Ayat baru: potong dulu bunyi ayat sebelumnya, baru baca slot kata ini.
+    if (verse != _activeVerse) _switchVerse(verse);
+    final omitted = detectOmission ? _omittedWord(event.wordId, verse) : null;
+    // Bunyi slot dicatat **sekarang**, dari transkrip yang sedang dinilai.
+    // Menghitungnya lagi saat sheet dibuka akan memakai transkrip yang sudah
+    // bertambah (kata berikutnya) atau sudah direset percobaan lain.
+    _keepSnapshot(verse);
+    final heard = _heardAt(
+      event.wordId,
+      _asrText.isEmpty ? (_asr.textOf(verse) ?? '') : _asrText,
+    );
     setState(() {
       _missed.add(event.wordId);
       _matched.remove(event.wordId);
-      if (heard.isNotEmpty) _heard[event.wordId] = heard;
+      _asr.recordHeard(event.wordId, heard);
       if (omitted != null) _missed.add(omitted);
-      _activeVerse = verse;
     });
     _log('merah wordId=${event.wordId} ayat=${verse + 1}');
+  }
+
+  /// Bunyi ASR yang menempati slot kata global [wordId] pada transkrip [text].
+  String? _heardAt(int wordId, String text) {
+    if (text.trim().isEmpty) return null;
+    final verse = _verseOf(wordId);
+    if (verse + 1 >= _wordStarts.length) return null;
+    return heardForWord(
+      phonemesPerWord: _service.wordPhonemes.sublist(
+        _wordStarts[verse],
+        _wordStarts[verse + 1],
+      ),
+      wordIndex: wordId - _wordStarts[verse],
+      emitted: text,
+    );
   }
 
   /// Indeks kata global yang paling mungkin dilewati, atau null.
@@ -189,6 +346,64 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     if (kDebugMode) debugPrint('[Murojaah] $message');
   }
 
+  /// TEMP-DIAG: transkrip berubah → hitung ulang keputusan tiap kata ayat aktif
+  /// terhadap transkrip terbaru. Membuktikan apakah merah/hijau berubah saat
+  /// hasil partial menjadi final.
+  void _diagTranscript(String text) {
+    if (!kDebugMode) return;
+    if (text.isEmpty || _wordStarts.length < 2) return;
+    if (text == _diagLastText) return;
+    _diagLastText = text;
+    final verse = _activeVerse;
+    final start = _wordStarts[verse];
+    final end = _wordStarts[verse + 1];
+    final words = _service.wordPhonemes.sublist(start, end);
+    final buf = StringBuffer(
+      '[DIAG][TEXT] coba=$_diagAttempt ayah=${verse + 1} len=${text.length}',
+    );
+    for (var i = 0; i < words.length; i++) {
+      final heard = heardForWord(
+        phonemesPerWord: words,
+        wordIndex: i,
+        emitted: text,
+      );
+      final wrong = isWrongReading(words[i], heard);
+      buf.write(' | w$i wrong=$wrong slot="${heard ?? ''}"');
+    }
+    debugPrint(buf.toString());
+    debugPrint('[DIAG][TEXT] raw="$text"');
+  }
+
+  /// TEMP-DIAG: satu baris per percobaan kata — acuan, transkrip mentah,
+  /// status matcher, `cleanAsr`, hasil `isWrongReading`, dan keputusan akhir.
+  void _diagEvent(WordMatchedEvent event, int verse, String verdict) {
+    if (!kDebugMode) return;
+    final ref = _service.phonemesOf(event.wordId);
+    final start = _wordStarts[verse];
+    final local = event.wordId - start;
+    final heard = heardForWord(
+      phonemesPerWord: _service.wordPhonemes.sublist(
+        start,
+        _wordStarts[verse + 1],
+      ),
+      wordIndex: local,
+      emitted: _asrText,
+    );
+    final wrong = isWrongReading(ref, event.cleanAsr);
+    debugPrint(
+      '[DIAG][WORD] coba=$_diagAttempt ayah=${verse + 1} '
+      'w=$local/${_wordStarts[verse + 1] - start} '
+      'text="${_wordText(event.wordId)}" ref="$ref" '
+      'status=${event.isRed ? 'RED' : 'GREEN'} '
+      'score=${event.score.toStringAsFixed(3)} '
+      'cleanAsr="${event.cleanAsr}" heard="${heard ?? ''}" '
+      'isWrong=$wrong verdict=$verdict',
+    );
+    debugPrint(
+      '[DIAG][WORD] asr="$_asrText" slot="${heard ?? ''}" '
+      'slotDisplay="${heard == null ? '' : displayHeard(heard)}"',
+    );
+  }
   /// Teks kata global [wordId] dari ayat pemiliknya.
   ///
   /// `wordId` mengikuti kata fonetis; jumlah kata fonetis = jumlah kata
@@ -198,6 +413,26 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     final words = _verses[verse].uthmaniWords;
     final local = wordId - _wordStarts[verse];
     return local >= 0 && local < words.length ? words[local] : '';
+  }
+
+  /// Bunyi ASR yang menempati slot kata merah [wordId], atau null bila kata
+  /// itu memang tidak diucapkan. Lihat [heardForWord].
+  ///
+  /// Nilai yang dicatat saat kata dinilai merah selalu dipakai lebih dulu;
+  /// hitung ulang hanya cadangan untuk kata yang ditandai tanpa event.
+  String? _heardOf(int wordId) {
+    if (_asr.hasHeard(wordId)) return _asr.heardOf(wordId);
+    final verse = _verseOf(wordId);
+    final text = _asr.textOf(verse);
+    if (text == null || text.trim().isEmpty) return null;
+    return heardForWord(
+      phonemesPerWord: _service.wordPhonemes.sublist(
+        _wordStarts[verse],
+        _wordStarts[verse + 1],
+      ),
+      wordIndex: wordId - _wordStarts[verse],
+      emitted: text,
+    );
   }
 
   /// Akurasi bacaan: benar / (benar + salah). 100% bila belum ada percobaan.
@@ -232,19 +467,12 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
 
   /// Sheet koreksi: kata yang diharapkan vs yang terdengar.
   void _showCorrection(int wordId) {
-    final dark = QuranThemeScope.darkOf(context);
     unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        backgroundColor: QuranTokens.surface(dark),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (_) => _CorrectionSheet(
-          expected: _wordText(wordId),
-          heard: _heard[wordId],
-          dark: dark,
-        ),
+      showReciteCorrectionSheet(
+        context,
+        expected: _wordText(wordId),
+        heard: _heardOf(wordId),
+        dark: QuranThemeScope.darkOf(context),
       ),
     );
   }
@@ -261,30 +489,52 @@ class _ReciteMurojaahPageState extends State<ReciteMurojaahPage> {
     await _service.startListening();
   }
 
-  /// Ulangi ayat aktif: buang tanda merah ayat ini.
+  /// Ulangi ayat aktif: buang tanda merah ayat ini dan kembalikan kursor
+  /// pelacakan ke kata pertama ayat tersebut.
+  ///
+  /// Kata yang sudah hijau tetap terbuka (aturan §19): kursor mundur membuat
+  /// tracker mengirim ulang event kata-kata itu, dan hasilnya sama.
   void _retryCurrent() {
+    if (_wordStarts.length < 2) return;
     final start = _wordStarts[_activeVerse];
     final end = _wordStarts[_activeVerse + 1];
+    _service.rewindTo(start);
+    _diagAttempt++;
+    _log('DIAG coba=$_diagAttempt mulai ulang ayat ${_activeVerse + 1}');
     setState(() {
       _missed.removeWhere((id) => id >= start && id < end);
-      _matched.removeWhere((id) => id >= start && id < end);
-      _heard.removeWhere((id, _) => id >= start && id < end);
-      _asrText = '';
+      // Percobaan baru: transkrip & bunyi kata ayat ini dibuang supaya
+      // "terdengar" tidak memakai bacaan lama.
+      _asr.rewind(forgetWords: Iterable.generate(end - start, (i) => start + i));
+      _resetAsr();
     });
+    unawaited(_resumeListening());
   }
 
   /// Kembali ke ayat pertama.
   void _resetAll() {
     _peekTimer?.cancel();
+    _service.rewindTo(0);
+    _diagAttempt++;
     setState(() {
       _activeVerse = 0;
       _matched.clear();
       _missed.clear();
-      _heard.clear();
+      _asr.rewind(forgetWords: Iterable.generate(_service.wordPhonemes.length, (i) => i));
       _peekWord = null;
       _peekCount = 0;
-      _asrText = '';
+      _resetAsr();
     });
+    unawaited(_resumeListening());
+  }
+
+  /// Nyalakan lagi mikrofon bila sesi sebelumnya sudah berjalan tetapi berhenti
+  /// (mis. semua kata hijau memicu `stopListening`). Tanpa ini tombol Ulangi /
+  /// Reset tampak mati: kursor sudah mundur, tapi tidak ada audio masuk.
+  Future<void> _resumeListening() async {
+    if (!_sawEvent) return;
+    if (_service.status.value != ReciteMurojaahStatus.ready) return;
+    await _service.startListening();
   }
 
   @override
@@ -583,129 +833,6 @@ class _Header extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Sheet koreksi untuk kata merah: kata yang diharapkan vs yang terdengar.
-class _CorrectionSheet extends StatelessWidget {
-  const _CorrectionSheet({
-    required this.expected,
-    required this.heard,
-    required this.dark,
-  });
-
-  final String expected;
-  final String? heard;
-  final bool dark;
-
-  @override
-  Widget build(BuildContext context) {
-    final green = QuranTokens.successColor(dark);
-    final red = Colors.red.shade400;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Koreksi kata',
-              textAlign: TextAlign.center,
-              style: QuranTokens.poppins(
-                TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                  color: QuranTokens.secondaryColor(dark),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _SheetSide(
-                    label: 'Seharusnya',
-                    text: expected,
-                    color: green,
-                    size: 30,
-                    dark: dark,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 22),
-                  child: Icon(
-                    Icons.arrow_back,
-                    size: 18,
-                    color: QuranTokens.secondaryColor(dark).withValues(alpha: 0.6),
-                  ),
-                ),
-                Expanded(
-                  child: _SheetSide(
-                    label: 'Terdengar',
-                    text: heard == null || heard!.isEmpty ? 'tidak terdengar' : heard!,
-                    color: red,
-                    size: heard == null || heard!.isEmpty ? 14 : 22,
-                    dark: dark,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              child: const Text('Tutup'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetSide extends StatelessWidget {
-  const _SheetSide({
-    required this.label,
-    required this.text,
-    required this.color,
-    required this.size,
-    required this.dark,
-  });
-
-  final String label;
-  final String text;
-  final Color color;
-  final double size;
-  final bool dark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: QuranTokens.poppins(
-            TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: QuranTokens.secondaryColor(dark),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          text,
-          textAlign: TextAlign.center,
-          textDirection: TextDirection.rtl,
-          style: QuranTokens.amiri(
-            TextStyle(fontSize: size, fontWeight: FontWeight.w700, color: color),
-          ),
-        ),
-      ],
     );
   }
 }

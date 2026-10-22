@@ -576,6 +576,29 @@ const TrackerConfig(
   di `pubspec.yaml`. APK release per-ABI jadi ~56 MB (arm64) alih-alih ~125 MB;
   69 MB model diunduh terpisah saat pertama membuka Murojaah.
 
+### Batas akurasi matcher
+
+`matchWord` memakai **free-start** (`dp[i*stride] = 0`): token sampah di awal
+buffer gratis, dan token kata yang salah baca menempel ke `cleanAsr` kata
+berikutnya. Skor = `1 - pathCost` dengan `pathCost` **dinormalisasi per panjang
+kata acuan**, sehingga satu fonem salah pada kata panjang tetap di atas ambang
+(`…م` → `…ن` skor 0.857 → hijau). `MatchingStrictness.hard` /
+`TrackerConfig.strict()` tidak mengubah hasil: yang bergeser hanya ambang, bukan
+normalisasinya.
+
+Konsekuensi di layer app:
+
+- Setiap event **hijau** diverifikasi ulang (`isWrongReading` di
+  `heard_word.dart`) dengan membandingkan kerangka konsonan kata acuan vs
+  `cleanAsr`. Kesalahan harakat murni tidak terdeteksi (model CTC tidak andal
+  pada vokal pendek).
+- `WordMatchedEvent.cleanAsr` hanya terisi untuk event hijau;
+  `DictationSequencer._commitRed` selalu mengirim `cleanAsr: ''`. Teks
+  "terdengar" untuk kata merah direkonstruksi app (`heardForWord`) dari LCS
+  fonem ayat ↔ transkrip.
+- Tracker tidak punya API reset state; kursor kata hidup di isolate. Ulangi /
+  Reset wajib `jumpToWord()` + `resetBuffer()` (`ReciteMurojaahService.rewindTo`).
+
 ### Teks Arab
 
 Dataset `recite_quran` menyimpan dua bentuk teks:

@@ -63,6 +63,10 @@ class ReciteMurojaahService {
   Stream<String> get transcript =>
       _tracker?.onTranscript ?? const Stream<String>.empty();
 
+  /// Kata acuan global [wordId] dalam fonem (kosong bila di luar rentang).
+  String phonemesOf(int wordId) =>
+      wordId >= 0 && wordId < _wordPhonemes.length ? _wordPhonemes[wordId] : '';
+
   /// Idempotent; safe to call repeatedly or to retry after a failure.
   Future<void> initialize() {
     if (_disposed) return Future<void>.value();
@@ -94,21 +98,34 @@ class ReciteMurojaahService {
           onProgress: (p, _) => downloadProgress.value = p,
         );
         if (!ok) {
-          _fail('Gagal mengunduh model bacaan. Periksa koneksi lalu coba lagi.');
+          _fail('Unduhan gagal. Periksa internet, lalu coba lagi.');
           return;
         }
         if (_disposed) return;
       }
 
+      final engine = SherpaEngine(
+        assetOverrideDir: await downloader.getModelDirectoryPath(),
+      );
+      // TEMP-DIAG: transkrip mentah + status partial/final langsung dari engine.
+      // `ReciteQuran.onTranscript` tidak membedakan keduanya.
+      var lastDiagText = '';
+      engine.transcriptionStream.listen((r) {
+        if (!kDebugMode) return;
+        if (r.text == lastDiagText) return;
+        lastDiagText = r.text;
+        debugPrint(
+          '[DIAG][ASR] final=${r.isFinal} epoch=${r.streamEpoch} '
+          'len=${r.text.length} "${r.text}"',
+        );
+      });
       final tracker = ReciteQuran(
         repository: repository,
         // Model tidak dibundel di APK; arahkan engine ke folder unduhan.
-        engine: SherpaEngine(
-          assetOverrideDir: await downloader.getModelDirectoryPath(),
-        ),
+        engine: engine,
         // ignore: avoid_redundant_argument_values
         config: _examConfig,
-        isTajweed: false,
+        isTajweed: false, // ignore: avoid_redundant_argument_values
       );
       await tracker.initialize();
       tracker.setTargetSurah(surahNumber);
@@ -177,6 +194,18 @@ class ReciteMurojaahService {
     await _audio.stop();
     _tracker?.resetBuffer();
     if (!_disposed) _setStatus(ReciteMurojaahStatus.ready);
+  }
+
+  /// Kembalikan kursor pelacakan ke kata global [globalWordIndex].
+  ///
+  /// Wajib dipanggil saat pengguna mengulang ayat: `resetBuffer()` hanya
+  /// mengosongkan buffer ASR, sedangkan kursor kata hidup di isolate. Tanpa ini
+  /// bacaan ulang dicocokkan ke kata **berikutnya** sehingga ayat tampak maju
+  /// sendiri dan tidak ada kata yang kembali hijau.
+  void rewindTo(int globalWordIndex) {
+    if (_disposed) return;
+    _tracker?.jumpToWord(globalWordIndex);
+    _tracker?.resetBuffer();
   }
 
   /// Stops audio, releases the tracker, and disposes notifiers. Idempotent.

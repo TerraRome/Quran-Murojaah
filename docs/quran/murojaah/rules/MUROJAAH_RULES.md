@@ -199,11 +199,71 @@ berikutnya** yang belum terbuka selama 2 detik, lalu menutupnya lagi.
 Ketuk kata **merah** → bottom sheet membandingkan:
 
 - **Seharusnya** — kata dari `aya_text` (Amiri, hijau).
-- **Terdengar** — `WordMatchedEvent.cleanAsr` saat kata itu ditandai merah
-  (merah), atau `tidak terdengar` bila ASR tidak menghasilkan teks
-  (kata terlewat hasil `LcsOmissionDetector`).
+- **Terdengar** — potongan transkrip ASR yang menempati slot kata itu
+  (`heardForWord`), atau `tidak terdengar` bila memang tidak ada bunyi di slot
+  tersebut (kata terlewat hasil `LcsOmissionDetector`).
+
+`WordMatchedEvent.cleanAsr` **tidak** bisa dipakai untuk ini: `_commitRed`
+selalu mengirim `cleanAsr: ''`, jadi kata salah baca dan kata dilewati
+tampak identik. Slot kata direkonstruksi dari LCS fonem ayat ↔ transkrip:
+LCS diselaraskan **sekali** untuk seluruh ayat, lalu tiap kata mendapat rentang
+ASR bersambung dan tidak tumpang tindih (`wordAsrRanges`). Substitusi → ada
+bunyi pengganti; dilewati → rentang kosong.
+
+Rentang tidak tumpang tindih wajib: dengan batas lama ("sesudah fonem terakhir
+kata sebelumnya / sebelum fonem pertama kata sesudahnya") kata yang seluruhnya
+tidak cocok membuat kata berikutnya mulai dari indeks 0 dan **mencuri** bunyi
+kata sebelumnya — persis keluhan "Terdengar memuat bacaan sebelumnya". Jangkar
+tiap kata juga otomatis memotong awalan transkrip milik ayat sebelumnya, karena
+transkrip ASR kumulatif per segmen.
+
+Bunyi slot dicatat **pada saat kata dinilai merah** (`AsrSnapshot.recordHeard`,
+`wordIndex → heard`), bukan dihitung ulang saat sheet dibuka: transkrip terus
+bertambah dan sudah bisa memuat kata berikutnya. Snapshot transkrip per ayat
+terikat ke satu percobaan (`AsrSnapshot.epoch`); Ulangi/Reset memanggil
+`rewind()` sehingga snapshot percobaan lama tidak pernah dipakai lagi.
+
+Transkrip satu segmen **kumulatif lintas ayat**: saat pelacakan pindah ke ayat 7,
+transkrip masih memuat bacaan ayat 1–6. Halaman memotong awalan itu
+(`asrConsumed` atas seluruh kata sebelum ayat aktif) sebelum membaca slot kata.
+Tanpa potongan, kata pertama ayat baru yang tidak cocok mengambil `start = 0`
+dan sheet menampilkan bacaan ayat pertama untuk kata ayat terakhir.
 
 Sheet tidak mengubah state hafalan; hanya menjelaskan kesalahan.
+
+---
+
+# 5d. Hijau Palsu
+
+Matcher menormalkan biaya salah baca per panjang kata acuan, sehingga satu
+fonem salah pada kata panjang tetap lolos ambang (mis. `…م` → `…ن`, skor
+0.857, tetap hijau). `MatchingStrictness.hard` tidak menolong: yang berubah
+hanya ambang, bukan normalisasinya.
+
+Karena itu setiap event hijau diverifikasi ulang di layer app
+(`isWrongReading`): kerangka konsonan kata acuan dibandingkan dengan
+`cleanAsr`. Kerangka membuang harakat/madd marker, meringkas huruf berulang,
+dan menyamakan pasangan huruf yang secara akustik memang tertukar
+(ط/ت، ص/س، ض/د، ك/ق، …) agar bacaan benar tidak ikut merah.
+
+Yang **tidak** dideteksi: kesalahan harakat murni (fatha/damma/kasra) —
+model CTC tidak cukup andal pada vokal pendek. Naikkan ke perbandingan penuh
+bila akurasi harakat terbukti stabil.
+
+Kata yang dihijaukan-tapi-salah ditandai merah **tanpa** menjalankan
+`LcsOmissionDetector`: bunyi penggantinya sudah menempati slot kata itu,
+sehingga detektor akan menuduh kata lain sebagai terlewat.
+
+---
+
+# 5e. Ulangi & Reset
+
+Tombol **Ulangi** dan **Reset** wajib memanggil `rewindTo(globalWordIndex)`
+(`tracker.jumpToWord` + `resetBuffer`). Membersihkan state UI saja tidak
+cukup: kursor kata hidup di isolate pelacak, sehingga bacaan ulang dicocokkan
+ke kata **berikutnya** — ayat tampak maju sendiri dan tidak ada kata yang
+kembali hijau. Mikrofon dinyalakan lagi bila sesi sebelumnya sudah berhenti
+(semua kata hijau memicu `stopListening`).
 
 ---
 

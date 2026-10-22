@@ -15,58 +15,72 @@ String arabicIndic(int value) {
 /// Renderer mushaf untuk Murojaah berbasis `recite_quran`.
 ///
 /// Seluruh surah dirender sebagai satu aliran teks RTL (bukan daftar ayat).
-/// Ayat yang belum terbuka tetap menempati ruang aslinya: teksnya dicat
-/// transparan lalu ditutup blok redaksi yang digambar di atasnya. Saat ayat
-/// dibuka, blok memudar — tata letak tidak pernah bergeser.
+/// Kata yang belum diucapkan benar tetap menempati ruang aslinya: teksnya
+/// dicat transparan lalu ditutup blok redaksi per kata. Kata yang sudah cocok
+/// tampil hijau, kata yang salah tampil merah. Tata letak tidak pernah
+/// bergeser.
 class ReciteMushaf extends StatefulWidget {
   const ReciteMushaf({
     super.key,
     required this.verses,
-    required this.revealedCount,
-    this.lastMatchedWord,
-    this.retryVerseIndex,
+    required this.matched,
+    required this.missed,
+    required this.activeVerse,
+    this.peekWord,
+    this.onWordTap,
   });
 
   final List<QuranVerse> verses;
 
-  /// Jumlah ayat pertama yang sudah diterima (revealed).
-  final int revealedCount;
+  /// Indeks kata global (0-based) yang sudah diucapkan benar.
+  final Set<int> matched;
 
-  /// Indeks kata global (0-based) yang baru cocok — diberi highlight halus.
-  final int? lastMatchedWord;
+  /// Indeks kata global yang ditandai salah / terlupa.
+  final Set<int> missed;
 
-  /// Ayat yang sedang perlu diulang (state merah), null bila tidak ada.
-  final int? retryVerseIndex;
+  /// Ayat yang sedang dibaca — target auto-scroll.
+  final int activeVerse;
+
+  /// Kata yang sedang dibuka sementara (peek hint) — tampil tapi tidak dihitung.
+  final int? peekWord;
+
+  /// Dipanggil saat kata di mushaf disentuh (untuk sheet koreksi).
+  final ValueChanged<int>? onWordTap;
 
   @override
   State<ReciteMushaf> createState() => _ReciteMushafState();
 }
 
-class _ReciteMushafState extends State<ReciteMushaf>
-    with SingleTickerProviderStateMixin {
+class _ReciteMushafState extends State<ReciteMushaf> {
   final ScrollController _scroll = ScrollController();
-  late final AnimationController _fade = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 320),
-    value: 1,
-  );
-
-  /// Ayat yang bloknya sedang memudar (baru dibuka).
-  int? _fading;
   double _lastScrollTarget = -1;
 
-  @override
-  void didUpdateWidget(covariant ReciteMushaf oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.revealedCount > oldWidget.revealedCount) {
-      _fading = widget.revealedCount - 1;
-      _fade.forward(from: 0);
-    }
+  /// Dokumen di-cache: dibangun ulang hanya saat state visual berubah.
+  _MushafDoc? _doc;
+  ({int matched, int missed, bool dark, double fontSize, int peek})? _docKey;
+
+  _MushafDoc _document(TextStyle base, double fontSize, bool dark) {
+    final key = (
+      matched: Object.hashAll(widget.matched),
+      missed: Object.hashAll(widget.missed),
+      dark: dark,
+      fontSize: fontSize,
+      peek: widget.peekWord ?? -1,
+    );
+    if (_doc != null && _docKey == key) return _doc!;
+    _docKey = key;
+    return _doc = _MushafDoc.build(
+      verses: widget.verses,
+      base: base,
+      matched: widget.matched,
+      missed: widget.missed,
+      peekWord: widget.peekWord,
+      dark: dark,
+    );
   }
 
   @override
   void dispose() {
-    _fade.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -74,7 +88,7 @@ class _ReciteMushafState extends State<ReciteMushaf>
   void _scrollToActive(_MushafLayout layout) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
-      final boxes = layout.verseBoxes[widget.revealedCount];
+      final boxes = layout.verseBoxes[widget.activeVerse];
       if (boxes == null || boxes.isEmpty) return;
       final top = boxes.map((b) => b.top).reduce(math.min);
       final target = (top - 24).clamp(0.0, double.infinity);
@@ -101,50 +115,55 @@ class _ReciteMushafState extends State<ReciteMushaf>
         color: QuranTokens.arabicNameColor(dark),
       ),
     );
-    final doc = _MushafDoc.build(
-      verses: widget.verses,
-      base: base,
-      lastMatchedWord: widget.lastMatchedWord,
-      revealedCount: widget.revealedCount,
-      dark: dark,
-    );
+    final doc = _document(base, fontSize, dark);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final layout = doc.layout(constraints.maxWidth);
+        final layout = doc.layout(constraints.maxWidth, fontSize);
         _scrollToActive(layout);
         return SingleChildScrollView(
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(0, 4, 0, 28),
-          child: SizedBox(
-            width: constraints.maxWidth,
-            child: Stack(
-              children: [
-                RichText(
-                  text: TextSpan(children: doc.spans, style: base),
-                  textDirection: TextDirection.rtl,
-                ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedBuilder(
-                      animation: _fade,
-                      builder: (context, _) => CustomPaint(
-                        painter: _RedactionPainter(
-                          layout: layout,
-                          revealedCount: widget.revealedCount,
-                          fading: _fading,
-                          fade: Curves.easeOut.transform(_fade.value),
-                          retryVerseIndex: widget.retryVerseIndex,
-                          blockColor: QuranTokens.inkColor(dark)
-                              .withValues(alpha: dark ? 0.24 : 0.15),
-                          retryColor:
-                              Colors.red.shade400.withValues(alpha: 0.30),
+          // Surah pendek: isi tetap di tengah, bukan menumpuk di atas.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: widget.onWordTap == null
+                      ? null
+                      : (details) {
+                          final id = layout.wordAt(details.localPosition);
+                          if (id != null) widget.onWordTap!(id);
+                        },
+                  child: Stack(
+                    children: [
+                      // Lebar penuh supaya RichText dan overlay redaksi memakai
+                      // sistem koordinat yang sama (RTL → rata kanan).
+                      SizedBox(
+                        width: constraints.maxWidth,
+                        child: RichText(
+                          text: TextSpan(children: doc.spans, style: base),
+                          textDirection: TextDirection.rtl,
                         ),
                       ),
-                    ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _RedactionPainter(
+                              boxes: layout.hiddenBoxes,
+                              color: QuranTokens.secondaryColor(dark)
+                                  .withValues(alpha: dark ? 0.34 : 0.26),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -154,14 +173,20 @@ class _ReciteMushafState extends State<ReciteMushaf>
 }
 
 /// Dokumen mushaf: rangkaian span (kata + penanda ayat) beserta offset tiap
-/// ayat untuk menghitung kotak redaksi.
+/// kata/ayat untuk menghitung kotak redaksi.
 class _MushafDoc {
-  _MushafDoc._(this.spans, this.verseStarts, this.verseEnds, this.style);
+  _MushafDoc._(this.spans, this.wordRanges, this.verseStarts, this.verseEnds,
+      this.hiddenWords, this.style);
 
   final List<InlineSpan> spans;
+
+  /// Rentang karakter tiap kata global (indeks = `wordId`).
+  final List<(int, int)> wordRanges;
   final List<int> verseStarts;
   final List<int> verseEnds;
-  final TextStyle style;
+
+  /// `wordId` kata yang belum cocok — sumber blok redaksi.
+  final List<int> hiddenWords;  final TextStyle style;
 
   double? _width;
   _MushafLayout? _layout;
@@ -169,38 +194,44 @@ class _MushafDoc {
   factory _MushafDoc.build({
     required List<QuranVerse> verses,
     required TextStyle base,
-    required int? lastMatchedWord,
-    required int revealedCount,
+    required Set<int> matched,
+    required Set<int> missed,
     required bool dark,
+    int? peekWord,
   }) {
     final spans = <InlineSpan>[];
+    final ranges = <(int, int)>[];
     final starts = <int>[];
     final ends = <int>[];
-    final highlight = QuranTokens.brandColor(dark).withValues(alpha: 0.16);
+    final hidden = <int>[];
+    final green = QuranTokens.successColor(dark);
+    final red = Colors.red.shade400;
+    final ink = QuranTokens.inkColor(dark);
     var offset = 0;
     var wordId = 0;
 
     for (var v = 0; v < verses.length; v++) {
       final verse = verses[v];
-      // Ayat yang belum terbuka: teks transparan supaya tidak terbaca.
-      final hidden = v >= revealedCount;
       starts.add(offset);
       final words = verse.uthmaniWords.isNotEmpty
           ? verse.uthmaniWords
           : verse.textUthmani.split(RegExp(r'\s+'));
       for (var w = 0; w < words.length; w++) {
-        final matched = wordId == lastMatchedWord;
-        spans.add(
-          TextSpan(
-            text: words[w],
-            style: hidden
-                ? const TextStyle(color: Colors.transparent)
-                : matched
-                    ? TextStyle(backgroundColor: highlight)
-                    : null,
-          ),
-        );
-        offset += words[w].length;
+        final word = words[w];
+        // Kata yang belum diucapkan: transparan (ditutup blok redaksi) supaya
+        // tidak terbaca tapi tata letak tetap. Kata "peek" tampil biasa tapi
+        // tidak dihitung sebagai hafal.
+        final Color color = matched.contains(wordId)
+            ? green
+            : missed.contains(wordId)
+                ? red
+                : wordId == peekWord
+                    ? ink
+                    : Colors.transparent;
+        if (color == Colors.transparent) hidden.add(wordId);
+        spans.add(TextSpan(text: word, style: TextStyle(color: color)));
+        ranges.add((offset, offset + word.length));
+        offset += word.length;
         wordId++;
         if (w < words.length - 1) {
           spans.add(const TextSpan(text: ' '));
@@ -214,94 +245,126 @@ class _MushafDoc {
       offset += marker.length;
     }
 
-    return _MushafDoc._(spans, starts, ends, base);
+    return _MushafDoc._(spans, ranges, starts, ends, hidden, base);
   }
 
-  /// Kotak tiap ayat pada lebar tertentu (di-cache per lebar).
-  _MushafLayout layout(double maxWidth) {
+  /// Kotak tiap ayat + kotak kata tersembunyi pada lebar tertentu (cached).
+  _MushafLayout layout(double maxWidth, double fontSize) {
     if (_layout != null && _width == maxWidth) return _layout!;
     final painter = TextPainter(
       text: TextSpan(children: spans, style: style),
       textDirection: TextDirection.rtl,
     )..layout(maxWidth: maxWidth);
-    final boxes = <int, List<Rect>>{};
+
+    List<Rect> boxesOf(int start, int end) => [
+          for (final b in painter.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: end),
+          ))
+            Rect.fromLTRB(b.left, b.top, b.right, b.bottom),
+        ];
+
+    final verseBoxes = <int, List<Rect>>{};
     for (var i = 0; i < verseStarts.length; i++) {
-      boxes[i] = [
-        for (final b in painter.getBoxesForSelection(
-          TextSelection(baseOffset: verseStarts[i], extentOffset: verseEnds[i]),
-        ))
-          Rect.fromLTRB(b.left, b.top, b.right, b.bottom),
-      ];
+      verseBoxes[i] = boxesOf(verseStarts[i], verseEnds[i]);
     }
+
+    final hiddenBoxes = _mergeRuns([
+      for (final id in hiddenWords)
+        for (final rect in boxesOf(wordRanges[id].$1, wordRanges[id].$2))
+          (id: id, rect: rect),
+    ]);
+
     _width = maxWidth;
-    return _layout = _MushafLayout(boxes);
+    return _layout = _MushafLayout(verseBoxes, hiddenBoxes, painter, wordRanges);
+  }
+
+  /// Gabungkan kotak per-kata menjadi satu batang per baris, tapi hanya untuk
+  /// kata yang berurutan: blok tidak boleh menutupi kata yang sudah terbuka.
+  static List<Rect> _mergeRuns(List<({int id, Rect rect})> boxes) {
+    if (boxes.length < 2) return [for (final b in boxes) b.rect];
+    final sorted = [...boxes]..sort((a, b) {
+        if ((a.rect.top - b.rect.top).abs() > 2) {
+          return a.rect.top.compareTo(b.rect.top);
+        }
+        return a.rect.left.compareTo(b.rect.left);
+      });
+    final merged = <Rect>[];
+    final ids = <int>[];
+    for (final box in sorted) {
+      if (merged.isNotEmpty &&
+          (box.id - ids.last).abs() == 1 &&
+          box.rect.top < merged.last.bottom - 2) {
+        merged[merged.length - 1] = merged.last.expandToInclude(box.rect);
+        ids[ids.length - 1] = box.id;
+      } else {
+        merged.add(box.rect);
+        ids.add(box.id);
+      }
+    }
+    return merged;
   }
 }
 
 class _MushafLayout {
-  const _MushafLayout(this.verseBoxes);
+  const _MushafLayout(
+    this.verseBoxes,
+    this.hiddenBoxes,
+    this._painter,
+    this._wordRanges,
+  );
 
   final Map<int, List<Rect>> verseBoxes;
+  final List<Rect> hiddenBoxes;
+  final TextPainter _painter;
+  final List<(int, int)> _wordRanges;
+
+  /// `wordId` pada titik [point] (koordinat teks), atau null bila kena spasi.
+  int? wordAt(Offset point) {
+    final offset = _painter.getPositionForOffset(point).offset;
+    var lo = 0;
+    var hi = _wordRanges.length - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      final (start, end) = _wordRanges[mid];
+      if (offset < start) {
+        hi = mid - 1;
+      } else if (offset >= end) {
+        lo = mid + 1;
+      } else {
+        return mid;
+      }
+    }
+    return null;
+  }
 }
 
-/// Menutup ayat yang belum terbuka dengan blok solid; ayat yang baru terbuka
-/// memudar lewat [fade].
+/// Menutup kata yang belum terbuka dengan blok solid.
 class _RedactionPainter extends CustomPainter {
-  _RedactionPainter({
-    required this.layout,
-    required this.revealedCount,
-    required this.fading,
-    required this.fade,
-    required this.retryVerseIndex,
-    required this.blockColor,
-    required this.retryColor,
-  });
+  _RedactionPainter({required this.boxes, required this.color});
 
-  final _MushafLayout layout;
-  final int revealedCount;
-  final int? fading;
-  final double fade;
-  final int? retryVerseIndex;
-  final Color blockColor;
-  final Color retryColor;
+  final List<Rect> boxes;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final entry in layout.verseBoxes.entries) {
-      final index = entry.key;
-      var color = index == retryVerseIndex ? retryColor : blockColor;
-      if (index >= revealedCount) {
-        // Masih tertutup penuh.
-      } else if (index == fading) {
-        color = color.withValues(alpha: color.a * (1 - fade));
-      } else {
-        continue;
-      }
-      final paint = Paint()..color = color;
-      for (final rect in entry.value) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTRB(
-              rect.left - 1,
-              rect.top + 5,
-              rect.right + 1,
-              rect.bottom - 5,
-            ),
-            const Radius.circular(2.5),
+    final paint = Paint()..color = color;
+    for (final rect in boxes) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            rect.left - 1,
+            rect.top + 5,
+            rect.right + 1,
+            rect.bottom - 5,
           ),
-          paint,
-        );
-      }
+          const Radius.circular(3),
+        ),
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(_RedactionPainter old) =>
-      old.layout != layout ||
-      old.revealedCount != revealedCount ||
-      old.fading != fading ||
-      old.fade != fade ||
-      old.retryVerseIndex != retryVerseIndex ||
-      old.blockColor != blockColor ||
-      old.retryColor != retryColor;
+      old.boxes != boxes || old.color != color;
 }

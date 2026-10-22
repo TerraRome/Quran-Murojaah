@@ -48,6 +48,10 @@ class QuranTokens {
   /// Warna brand aktif (judul app, tab aktif) — Figma `#672CBC`.
   static Color brandColor(bool dark) => dark ? const Color(0xFFA44AFF) : primary;
 
+  /// Warna kata yang sudah diucapkan benar (murojaah).
+  static Color successColor(bool dark) =>
+      dark ? const Color(0xFF66D9A0) : const Color(0xFF1F9D63);
+
   /// Divider item daftar surah (Figma: rgba(187,196,206,0.35)).
   static Color listDivider(bool dark) => dark ? darkDivider : const Color(0x59BBC4CE);
 
@@ -198,6 +202,8 @@ class QuranTokens {
   static TextStyle poppins([TextStyle? style]) =>
       GoogleFonts.poppins(textStyle: style);
 
-  /// Font teks Arab (Amiri).
-  static TextStyle amiri([TextStyle? style]) => GoogleFonts.amiri(textStyle: style);
+  /// Font teks Arab (Amiri). Dibundel sebagai aset: tanpa jaringan, tanpa
+  /// font fallback sistem yang tidak punya glyph Arab (penyebab "kotak-kotak").
+  static TextStyle amiri([TextStyle? style]) =>
+      (style ?? const TextStyle()).copyWith(fontFamily: 'Amiri');
 }

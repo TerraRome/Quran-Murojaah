@@ -116,48 +116,94 @@ Contoh:
 
 # 4. Hidden Verse
 
-Ketika Murojaah dimulai, teks ayat disembunyikan.
+Ketika Murojaah dimulai, teks ayat disembunyikan **per kata**.
 
 Nomor ayat tetap terlihat.
 
 Contoh:
 
 ```text
-████████████ ۝١ ███████████ ۝٢
-████████████████ ۝٣ █████████ ۝٤
+████ ████ ████ ████ ۝١ ████ ████ ۝٢
+████ ████ ████ ۝٣ ████ ████ ۝٤
 ```
 
 Placeholder hanya berfungsi untuk menyembunyikan teks.
 
-**Layout tidak boleh berubah ketika ayat di-reveal.**
+**Layout tidak boleh berubah ketika kata di-reveal.**
 
 ---
 
-# 5. Progressive Reveal
+# 5. Progressive Reveal (per kata)
 
-Ketika ayat pertama benar:
+Reveal terjadi **kata demi kata**, bukan ayat demi ayat.
 
-```text
-قُلْ هُوَ اللَّهُ أَحَدٌ ۝١ ███████████ ۝٢
-████████████████ ۝٣ █████████ ۝٤
-```
-
-Ayat kedua benar:
+Kata yang diucapkan benar langsung terbuka (warna hijau). Kata yang salah atau
+terlupa tetap tertutup dan ditandai merah.
 
 ```text
-قُلْ هُوَ اللَّهُ أَحَدٌ ۝١ اللَّهُ الصَّمَدُ ۝٢
-████████████████ ۝٣ █████████ ۝٤
+قُلْ هُوَ ████ ████ ۝١ ████ ████ ████ ۝٢
 ```
 
-Dan seterusnya.
+Kata berikutnya benar:
 
-Reveal harus menggunakan animasi ringan:
+```text
+قُلْ هُوَ اللَّهُ ████ ۝١ ████ ████ ████ ۝٢
+```
 
-- fade in
-- optional highlight
-- smooth transition
+Dan seterusnya sampai seluruh surah terbuka.
+
+Aturan:
+
+- Satu event `WordMatchedEvent` hijau = satu kata terbuka.
+- Event merah = kata ditandai merah + haptic (`HapticFeedback.mediumImpact()`).
+- Kata yang dilewati dicari dengan `LcsOmissionDetector` (Best-Drop LCS) dan
+  ikut ditandai merah.
+- Reveal harus ringan: tidak ada animasi layout, tidak menggeser baris.
 
 Jangan menyebabkan layout mushaf bergeser secara tiba-tiba.
+
+---
+
+# 5a. Engine
+
+Pelacakan bacaan memakai `package:recite_quran` (on-device, DTW word
+alignment + zipformer ONNX). Konfigurasi mode ujian:
+
+```dart
+const TrackerConfig(
+  enableAutoReanchor: false,   // lompatan tidak dimaafkan
+  reanchorStallThreshold: 24,
+)
+```
+
+`enableAutoReanchor: true` hanya untuk mode tilawah/baca santai.
+
+---
+
+# 5b. Peek Hint & Skor Akurasi
+
+Tombol mata di header (`Icons.visibility_outlined`) membuka **satu kata
+berikutnya** yang belum terbuka selama 2 detik, lalu menutupnya lagi.
+
+- Kata hasil peek tampil dengan warna tinta biasa (bukan hijau) dan **tidak**
+  dihitung sebagai hafal — hanya info.
+- Setiap peek dihitung (`_peekCount`) dan ditampilkan di baris progres
+  (`12 / 50 · 2 lihat`).
+- Skor akurasi = `benar / (benar + salah)`, ditampilkan persen di baris progres.
+  Belum ada percobaan → 100%.
+
+---
+
+# 5c. Sheet Koreksi
+
+Ketuk kata **merah** → bottom sheet membandingkan:
+
+- **Seharusnya** — kata dari `aya_text` (Amiri, hijau).
+- **Terdengar** — `WordMatchedEvent.cleanAsr` saat kata itu ditandai merah
+  (merah), atau `tidak terdengar` bila ASR tidak menghasilkan teks
+  (kata terlewat hasil `LcsOmissionDetector`).
+
+Sheet tidak mengubah state hafalan; hanya menjelaskan kesalahan.
 
 ---
 
@@ -564,21 +610,21 @@ COMPLETED
 
 # 18. Progress
 
-Progress harus berdasarkan ayat yang berhasil.
+Progress dihitung dari **jumlah kata yang cocok / total kata surah**.
 
 Contoh:
 
 ```text
 Surah Al-Ikhlas
 
-2 / 4
+12 / 21
 
 ████████░░░░░░
 ```
 
 Progress tidak boleh maju hanya karena microphone menerima suara.
 
-Progress hanya maju ketika ayat berhasil divalidasi.
+Progress hanya maju ketika kata berhasil divalidasi (event hijau).
 
 ---
 
@@ -587,15 +633,15 @@ Progress hanya maju ketika ayat berhasil divalidasi.
 ## Correct
 
 ```text
-✓ Ayat berhasil dikenali
+✓ Kata dikenali
 ```
 
 Actions:
 
-- reveal ayat
-- highlight
+- reveal kata (hijau)
+- optional highlight
 - optional haptic
-- lanjut ke ayat berikutnya
+- lanjut ke kata berikutnya
 
 ---
 
@@ -605,7 +651,7 @@ Actions:
 Hampir benar, silakan ulangi.
 ```
 
-Tetap di ayat yang sama.
+Kata yang salah tetap tertutup; kata sebelumnya yang sudah hijau tetap terbuka.
 
 ---
 
@@ -613,10 +659,11 @@ Tetap di ayat yang sama.
 
 ```text
 Bacaan belum sesuai.
-Silakan ulangi ayat ini.
+Silakan ulangi kata ini.
 ```
 
-Tetap di ayat yang sama.
+Kata yang salah ditandai merah + haptic. Tombol **Ulangi** menghapus tanda
+merah pada ayat aktif tanpa menutup kata yang sudah benar.
 
 ---
 
@@ -1313,18 +1360,23 @@ Murojaah MVP dianggap selesai jika:
 - [ ] User dapat memilih surat.
 - [ ] User dapat memulai Murojaah.
 - [ ] Quran ditampilkan RTL seperti mushaf.
-- [ ] Semua ayat awalnya tersembunyi.
+- [ ] Semua kata awalnya tersembunyi.
 - [ ] Nomor ayat tetap terlihat.
 - [ ] User harus membaca secara berurutan.
 - [ ] Microphone dapat menerima bacaan.
 - [ ] Quran-specific ASR dapat mengenali bacaan.
 - [ ] Matching engine dapat menentukan kecocokan.
-- [ ] Ayat yang benar dapat di-reveal.
-- [ ] Ayat yang salah tetap tersembunyi.
-- [ ] User tidak dapat skip ayat.
-- [ ] Progress mengikuti ayat yang berhasil.
+- [ ] Kata yang benar terbuka satu per satu (hijau).
+- [ ] Kata yang salah tetap tersembunyi dan ditandai merah + haptic.
+- [ ] Kata yang dilewati terdeteksi (`LcsOmissionDetector`).
+- [ ] User tidak dapat skip kata.
+- [ ] Progress mengikuti jumlah kata yang berhasil.
 - [ ] Surat dapat diselesaikan sampai ayat terakhir.
 - [ ] Completion state tersedia.
+- [ ] Peek hint (1 kata, 2 detik) tersedia dan dihitung.
+- [ ] Skor akurasi tampil di baris progres.
+- [ ] Tap kata merah membuka sheet koreksi (seharusnya vs terdengar).
+- [ ] Model ASR diunduh on-demand, tidak dibundel di APK.
 - [ ] Error handling tersedia.
 - [ ] Test untuk matching dan state tersedia.
 

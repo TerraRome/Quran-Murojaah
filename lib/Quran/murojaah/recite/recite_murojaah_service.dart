@@ -13,6 +13,15 @@ enum ReciteMurojaahStatus {
   error,
 }
 
+/// Mode ujian hafalan: lompatan tidak dimaafkan (auto re-anchor mati), sehingga
+/// kata yang dilewati ditandai merah. Ditulis eksplisit walau saat ini sama
+/// dengan default paket, supaya perubahan default tidak diam-diam melonggarkan
+/// penilaian.
+const _examConfig = TrackerConfig(
+  enableAutoReanchor: false, // ignore: avoid_redundant_argument_values
+  reanchorStallThreshold: 24, // ignore: avoid_redundant_argument_values
+);
+
 /// Thin facade over `recite_quran` for a single surah: loads the surah,
 /// ensures the ASR model exists, and pipes microphone audio into the tracker.
 class ReciteMurojaahService {
@@ -41,6 +50,11 @@ class ReciteMurojaahService {
   List<int> get wordAyahStarts => _wordAyahStarts;
   List<int> _wordAyahStarts = const [];
 
+  /// Phoneme string tiap kata global (0-based `wordId`) — bahan
+  /// `LcsOmissionDetector`. Empty until [initialize] completes.
+  List<String> get wordPhonemes => _wordPhonemes;
+  List<String> _wordPhonemes = const [];
+
   /// Matched-word events from the tracker (broadcast).
   Stream<WordMatchedEvent> get wordEvents =>
       _tracker?.onWordMatched ?? const Stream<WordMatchedEvent>.empty();
@@ -58,8 +72,20 @@ class ReciteMurojaahService {
   Future<void> _initialize() async {
     try {
       _setStatus(ReciteMurojaahStatus.preparing);
-      final repository = QuranRepository(QuranMetadataService());
+      final meta = QuranMetadataService();
+      final repository = QuranRepository(meta);
       await repository.loadSurahAsync(surahNumber);
+      // `uthmaniWords` dari dataset memakai glyph Private Use Area (font khusus
+      // QCF) sehingga tampil sebagai kotak di font apa pun. `aya_text` adalah
+      // Unicode Arab asli dengan jumlah kata identik — pakai itu untuk render.
+      final ayaText = (meta.rawJson?['verses'] ?? meta.rawJson);
+      List<String> uiWords(QuranVerse v) {
+        final raw = ayaText is Map ? ayaText['${v.surah}:${v.ayah}'] : null;
+        final text = raw is Map ? raw['aya_text'] as String? : null;
+        if (text == null) return v.uthmaniWords;
+        final words = text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+        return words.length == v.uthmaniWords.length ? words : v.uthmaniWords;
+      }
 
       final downloader = ModelDownloader();
       if (!await downloader.isModelReady()) {
@@ -76,7 +102,12 @@ class ReciteMurojaahService {
 
       final tracker = ReciteQuran(
         repository: repository,
-        config: const TrackerConfig(enableAutoReanchor: true),
+        // Model tidak dibundel di APK; arahkan engine ke folder unduhan.
+        engine: SherpaEngine(
+          assetOverrideDir: await downloader.getModelDirectoryPath(),
+        ),
+        // ignore: avoid_redundant_argument_values
+        config: _examConfig,
         isTajweed: false,
       );
       await tracker.initialize();
@@ -87,7 +118,10 @@ class ReciteMurojaahService {
         return;
       }
       _tracker = tracker;
-      _verses = repository.getSurah(surahNumber);
+      _verses = repository.getSurah(surahNumber).map((v) {
+        final w = uiWords(v);
+        return v.copyWith(uthmaniWords: w, textUthmani: w.join(' '));
+      }).toList();
 
       // Authoritative word→ayah mapping: the tracker indexes words by
       // `getSurahWords` (phoneme words), not by Uthmani whitespace tokens.
@@ -102,6 +136,8 @@ class ReciteMurojaahService {
       }
       starts.add(words.length);
       _wordAyahStarts = List<int>.unmodifiable(starts);
+      _wordPhonemes =
+          List<String>.unmodifiable(words.map((w) => w.phoneme));
 
       _setStatus(ReciteMurojaahStatus.ready);
       _log('ready: surah=$surahNumber verses=${_verses.length}');
@@ -152,6 +188,7 @@ class ReciteMurojaahService {
     _tracker?.dispose();
     _tracker = null;
     _verses = const [];
+    _wordPhonemes = const [];
     downloadProgress.dispose();
     errorMessage.dispose();
     status.dispose();

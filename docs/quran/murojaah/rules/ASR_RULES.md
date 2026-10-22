@@ -535,3 +535,64 @@ ASR integration tests should cover:
 ## Core Principle
 
 > **ASR recognizes the recitation. Murojaah matching determines whether it matches the expected verse. Tajweed and Makharij require a separate pronunciation-analysis system.**
+
+---
+
+## 24. Implementasi Aktual (pipeline `recite_quran`)
+
+Pipeline lama (Whisper/Vosk + VAD + `speech_to_text`) sudah dihapus. Implementasi
+sekarang memakai `package:recite_quran` — on-device, offline, tanpa jaringan saat
+runtime.
+
+```text
+Microphone (16 kHz PCM16, chunk 480 ms)
+    ↓  AudioProcessor (DSP dimatikan: no AEC/NS/AGC)
+    ↓  SherpaEngine (zipformer int8, recite_quran_assets/ — unduh on-demand)
+    ↓  token fonetis
+    ↓  DTW word alignment (isolate)
+    ↓  WordMatchedEvent {wordId, isRed, score}
+```
+
+Konfigurasi wajib (mode ujian hafalan):
+
+```dart
+const TrackerConfig(
+  enableAutoReanchor: false,
+  reanchorStallThreshold: 24,
+)
+```
+
+- `wordId` = offset kata global di dalam surah, indeks mengikuti
+  `QuranRepository.getSurahWords()` (kata fonetis), **bukan** jumlah token
+  Uthmani. Pemetaan kata→ayat dihitung dari daftar itu.
+- `enableAutoReanchor: false` membuat lompatan kata tidak dimaafkan; kata yang
+  dilewati dilaporkan sebagai event merah, bukan dipulihkan diam-diam.
+- Deteksi kata terlupa memakai `LcsOmissionDetector.detectOmission()` dengan
+  `phonemesPerWord` dari `getSurahWords()` dan `emittedPhonemes` dari
+  `ReciteQuran.onTranscript`.
+- Model 69 MB **tidak dibundel**. `ModelDownloader` mengunduhnya ke
+  `recite_quran_assets/` saat pertama dibuka, dan `SherpaEngine(assetOverrideDir:)`
+  diarahkan ke folder itu. `assets/model/` masuk `.gitignore`; hapus baris aset
+  di `pubspec.yaml`. APK release per-ABI jadi ~56 MB (arm64) alih-alih ~125 MB;
+  69 MB model diunduh terpisah saat pertama membuka Murojaah.
+
+### Teks Arab
+
+Dataset `recite_quran` menyimpan dua bentuk teks:
+
+| Field | Isi | Dipakai |
+|---|---|---|
+| `aya_ui` | glyph Private Use Area (U+E000–U+F8FF) untuk font QCF/KFGQPC | ❌ tampil sebagai kotak di font lain |
+| `aya_text` | Unicode Arab asli | ✅ render UI |
+
+`QuranVerse.uthmaniWords` berasal dari `aya_ui`, jadi **tidak boleh** dipakai
+untuk render. `ReciteMurojaahService` menimpanya dengan kata dari `aya_text`
+(jumlah kata identik dengan `aya_phonemes_list` untuk seluruh 6236 ayat).
+
+Font UI: Amiri dibundel sebagai aset (`assets/fonts/Amiri-Regular.ttf`,
+`Amiri-Bold.ttf`, family `Amiri`) — bukan unduhan runtime Google Fonts.
+
+### Lisensi
+
+`recite_quran` gratis untuk penggunaan non-komersial. Aplikasi ini tidak menjual
+atau mengiklankan apa pun, dan kredit tetap dicantumkan.

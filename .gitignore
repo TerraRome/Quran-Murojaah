@@ -57,3 +57,6 @@ android/quran_android.iml
 # Misc
 *.log
 .DS_Store
+
+# Model ASR 69 MB — diunduh on-demand, jangan dibundel
+assets/model/

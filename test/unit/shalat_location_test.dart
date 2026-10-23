@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran/Quran/shalat/application/location_provider.dart';
 import 'package:quran/Quran/shalat/application/location_service.dart';
@@ -38,14 +40,55 @@ class _FakeProvider implements LocationProvider {
 
 /// Reverse geocoder palsu yang tidak menyentuh plugin.
 class _FakeGeocoder extends LocationService {
-  _FakeGeocoder(this.administrativeArea, this.locality);
+  _FakeGeocoder(
+    this.administrativeArea,
+    this.locality, {
+    this.coords = const (latitude: -6.2, longitude: 106.8),
+  });
 
   final String? administrativeArea;
   final String? locality;
 
+  /// Null = geocoding kota manual gagal (mis. offline).
+  final ({double latitude, double longitude})? coords;
+
   @override
   Future<PlaceNames?> reverseGeocode(double lat, double lng) async =>
       PlaceNames(administrativeArea: administrativeArea, locality: locality);
+
+  @override
+  Future<({double latitude, double longitude})?> coordinatesForCity(
+    String provinsi,
+    String kabkota,
+  ) async => coords;
+}
+
+/// Geocoder yang bisa ditahan: hasil baru keluar setelah [release] dipanggil.
+class _SlowGeocoder extends LocationService {
+  _SlowGeocoder(this.results);
+
+  /// kabkota → koordinat (atau null = gagal).
+  final Map<String, ({double latitude, double longitude})?> results;
+  final List<Completer<void>> _gates = [];
+  final List<String> calls = [];
+
+  /// Biarkan permintaan ke-[i] selesai.
+  void release(int i) => _gates[i].complete();
+
+  @override
+  Future<PlaceNames?> reverseGeocode(double lat, double lng) async => null;
+
+  @override
+  Future<({double latitude, double longitude})?> coordinatesForCity(
+    String provinsi,
+    String kabkota,
+  ) async {
+    calls.add(kabkota);
+    final gate = Completer<void>();
+    _gates.add(gate);
+    await gate.future;
+    return results[kabkota];
+  }
 }
 
 /// Data source palsu dengan provinsi/kabkota tetap.
@@ -62,10 +105,10 @@ class _FakeRemote implements ShalatRemoteDataSource {
 
   @override
   Future<List<String>> getKabkota(String provinsi) async => switch (provinsi) {
-        'DKI Jakarta' => ['KOTA JAKARTA PUSAT', 'KOTA JAKARTA BARAT'],
-        'Jawa Barat' => ['KOTA BANDUNG'],
-        _ => <String>[],
-      };
+    'DKI Jakarta' => ['KOTA JAKARTA PUSAT', 'KOTA JAKARTA BARAT'],
+    'Jawa Barat' => ['KOTA BANDUNG'],
+    _ => <String>[],
+  };
 
   @override
   Future<JadwalShalatModel> getJadwalShalat({
@@ -116,14 +159,13 @@ void main() {
     bool failJadwal = false,
     LocationService? geocoder,
     _FakeRemote? remote,
-  }) =>
-      ShalatController(
-        remote: remote ?? _FakeRemote(failJadwal: failJadwal),
-        local: ShalatLocalDataSource(),
-        locationService: geocoder ?? _FakeGeocoder(adminArea, locality),
-        locationProvider: _FakeProvider(outcome),
-        connectivityCheck: () async => true,
-      );
+  }) => ShalatController(
+    remote: remote ?? _FakeRemote(failJadwal: failJadwal),
+    local: ShalatLocalDataSource(),
+    locationService: geocoder ?? _FakeGeocoder(adminArea, locality),
+    locationProvider: _FakeProvider(outcome),
+    connectivityCheck: () async => true,
+  );
 
   // ── Pesan ramah untuk setiap sebab ────────────────────────────────────────
 
@@ -171,50 +213,54 @@ void main() {
       controller.dispose();
     });
 
-    test('izin ditolak: pesan ramah, jadwal manual tetap bisa dipilih',
-        () async {
-      final controller = build(
-        outcome: const LocationUnavailable(LocationIssue.denied),
-      );
-      await controller.init();
-      await controller.detectLocation();
+    test(
+      'izin ditolak: pesan ramah, jadwal manual tetap bisa dipilih',
+      () async {
+        final controller = build(
+          outcome: const LocationUnavailable(LocationIssue.denied),
+        );
+        await controller.init();
+        await controller.detectLocation();
 
-      final state = controller.value as ShalatNeedLocation;
-      expect(state.issue, LocationIssue.denied);
-      expect(copyForIssue(state.issue!).title, contains('Izin'));
+        final state = controller.value as ShalatNeedLocation;
+        expect(state.issue, LocationIssue.denied);
+        expect(copyForIssue(state.issue!).title, contains('Izin'));
 
-      // Pilihan kota manual tetap berfungsi.
-      await controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
-      expect(controller.value, isA<ShalatLoaded>());
-      controller.dispose();
-    });
+        // Pilihan kota manual tetap berfungsi.
+        await controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+        expect(controller.value, isA<ShalatLoaded>());
+        controller.dispose();
+      },
+    );
 
-    test('ditolak permanen: tidak melempar, menawarkan pengaturan aplikasi',
-        () async {
-      final provider = _FakeProvider(
-        const LocationUnavailable(LocationIssue.deniedForever),
-      );
-      final controller = ShalatController(
-        remote: _FakeRemote(),
-        local: ShalatLocalDataSource(),
-        locationService: _FakeGeocoder('DKI Jakarta', 'Jakarta Pusat'),
-        locationProvider: provider,
-        connectivityCheck: () async => true,
-      );
-      await controller.init();
-      await controller.detectLocation();
+    test(
+      'ditolak permanen: tidak melempar, menawarkan pengaturan aplikasi',
+      () async {
+        final provider = _FakeProvider(
+          const LocationUnavailable(LocationIssue.deniedForever),
+        );
+        final controller = ShalatController(
+          remote: _FakeRemote(),
+          local: ShalatLocalDataSource(),
+          locationService: _FakeGeocoder('DKI Jakarta', 'Jakarta Pusat'),
+          locationProvider: provider,
+          connectivityCheck: () async => true,
+        );
+        await controller.init();
+        await controller.detectLocation();
 
-      final state = controller.value as ShalatNeedLocation;
-      expect(state.issue, LocationIssue.deniedForever);
-      expect(
-        copyForIssue(state.issue!).action,
-        LocationAction.openAppSettings,
-      );
+        final state = controller.value as ShalatNeedLocation;
+        expect(state.issue, LocationIssue.deniedForever);
+        expect(
+          copyForIssue(state.issue!).action,
+          LocationAction.openAppSettings,
+        );
 
-      await controller.openAppSettings();
-      expect(provider.appSettingsCalls, 1);
-      controller.dispose();
-    });
+        await controller.openAppSettings();
+        expect(provider.appSettingsCalls, 1);
+        controller.dispose();
+      },
+    );
 
     test('GPS mati: menawarkan pengaturan lokasi perangkat', () async {
       final provider = _FakeProvider(
@@ -301,24 +347,259 @@ void main() {
     });
   });
 
+  // ── Koordinat untuk arah kiblat ───────────────────────────────────────────
+
+  group('koordinat kiblat', () {
+    test('GPS berhasil: koordinat asli disimpan', () async {
+      final controller = build(
+        outcome: const LocationFix(-6.2088, 106.8456),
+        adminArea: 'DKI Jakarta',
+        locality: 'Jakarta Pusat',
+      );
+      await controller.init();
+      await controller.detectLocation();
+
+      final loaded = controller.value as ShalatLoaded;
+      expect(loaded.koordinat?.latitude, closeTo(-6.2088, 0.0001));
+      expect(loaded.koordinat?.longitude, closeTo(106.8456, 0.0001));
+
+      // Tersimpan lintas sesi.
+      final saved = await ShalatLocalDataSource().getKoordinat();
+      expect(saved?.latitude, closeTo(-6.2088, 0.0001));
+      controller.dispose();
+    });
+
+    test('kota manual: koordinat hasil geocode disimpan', () async {
+      final controller = build(
+        outcome: const LocationUnavailable(LocationIssue.denied),
+        geocoder: _FakeGeocoder(
+          null,
+          null,
+          coords: const (latitude: -6.9175, longitude: 107.6191),
+        ),
+      );
+      await controller.init();
+      await controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+
+      final loaded = controller.value as ShalatLoaded;
+      expect(loaded.koordinat?.latitude, closeTo(-6.9175, 0.0001));
+      controller.dispose();
+    });
+
+    test(
+      'geocode kota gagal: jadwal tetap tampil, kiblat minta lokasi',
+      () async {
+        final controller = build(
+          outcome: const LocationUnavailable(LocationIssue.denied),
+          geocoder: _FakeGeocoder(null, null, coords: null),
+        );
+        await controller.init();
+        await controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+
+        final loaded = controller.value as ShalatLoaded;
+        expect(loaded.koordinat, isNull);
+        expect(loaded.jadwal.kabkota, 'KOTA BANDUNG');
+        controller.dispose();
+      },
+    );
+
+    test('ganti kota menghapus koordinat kota sebelumnya', () async {
+      final controller = build(
+        outcome: const LocationFix(-6.2088, 106.8456),
+        adminArea: 'DKI Jakarta',
+        locality: 'Jakarta Pusat',
+      );
+      await controller.init();
+      await controller.detectLocation();
+      expect((controller.value as ShalatLoaded).koordinat, isNotNull);
+
+      final offline = build(
+        outcome: const LocationUnavailable(LocationIssue.denied),
+        geocoder: _FakeGeocoder(null, null, coords: null),
+      );
+      await offline.init();
+      await offline.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+      expect((offline.value as ShalatLoaded).koordinat, isNull);
+
+      controller.dispose();
+      offline.dispose();
+    });
+  });
+
+  group('koordinat usang', () {
+    test(
+      'ganti kota: koordinat lama dibuang sebelum geocoding selesai',
+      () async {
+        final slow = _SlowGeocoder({
+          'KOTA BANDUNG': (latitude: -6.9175, longitude: 107.6191),
+          'KOTA JAKARTA PUSAT': (latitude: -6.2088, longitude: 106.8456),
+        });
+        final controller = ShalatController(
+          remote: _FakeRemote(),
+          local: ShalatLocalDataSource(),
+          locationService: slow,
+          locationProvider: _FakeProvider(
+            const LocationUnavailable(LocationIssue.denied),
+          ),
+          connectivityCheck: () async => true,
+        );
+        await controller.init();
+
+        final bandung = controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+        await Future<void>.delayed(Duration.zero);
+        slow.release(0);
+        await bandung;
+        expect(
+          (controller.value as ShalatLoaded).koordinat?.latitude,
+          closeTo(-6.9175, 0.0001),
+        );
+
+        // Kota baru dipilih; geocoding masih berjalan.
+        final jakarta = controller.setLokasi(
+          'DKI Jakarta',
+          'KOTA JAKARTA PUSAT',
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          (controller.value as ShalatLoaded).koordinat,
+          isNull,
+          reason: 'koordinat kota lama tidak boleh dipakai selama geocoding',
+        );
+
+        slow.release(1);
+        await jakarta;
+        expect(
+          (controller.value as ShalatLoaded).koordinat?.latitude,
+          closeTo(-6.2088, 0.0001),
+        );
+
+        controller.dispose();
+      },
+    );
+
+    test(
+      'hasil geocode lama tidak menimpa kota yang dipilih belakangan',
+      () async {
+        final slow = _SlowGeocoder({
+          'KOTA BANDUNG': (latitude: -6.9175, longitude: 107.6191),
+          'KOTA JAKARTA PUSAT': (latitude: -6.2088, longitude: 106.8456),
+        });
+        final controller = ShalatController(
+          remote: _FakeRemote(),
+          local: ShalatLocalDataSource(),
+          locationService: slow,
+          locationProvider: _FakeProvider(
+            const LocationUnavailable(LocationIssue.denied),
+          ),
+          connectivityCheck: () async => true,
+        );
+        await controller.init();
+
+        final first = controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+        await Future<void>.delayed(Duration.zero);
+        final second = controller.setLokasi(
+          'DKI Jakarta',
+          'KOTA JAKARTA PUSAT',
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        // Permintaan pertama (Bandung) selesai belakangan.
+        slow.release(1);
+        await second;
+        slow.release(0);
+        await first;
+
+        expect(
+          (controller.value as ShalatLoaded).koordinat?.latitude,
+          closeTo(-6.2088, 0.0001),
+          reason: 'hasil Bandung yang usang harus diabaikan',
+        );
+        expect(
+          (await ShalatLocalDataSource().getKoordinat())?.latitude,
+          closeTo(-6.2088, 0.0001),
+        );
+        controller.dispose();
+      },
+    );
+
+    test('refreshKoordinat mencari ulang kota tersimpan', () async {
+      final slow = _SlowGeocoder({
+        'KOTA BANDUNG': (latitude: -6.9175, longitude: 107.6191),
+      });
+      final controller = ShalatController(
+        remote: _FakeRemote(),
+        local: ShalatLocalDataSource(),
+        locationService: slow,
+        locationProvider: _FakeProvider(
+          const LocationUnavailable(LocationIssue.denied),
+        ),
+        connectivityCheck: () async => true,
+      );
+      await controller.init();
+      final pending = controller.setLokasi('Jawa Barat', 'KOTA BANDUNG');
+      await Future<void>.delayed(Duration.zero);
+      slow.release(0);
+      await pending;
+      expect((controller.value as ShalatLoaded).koordinat, isNotNull);
+
+      final retry = controller.refreshKoordinat();
+      await Future<void>.delayed(Duration.zero);
+      expect((controller.value as ShalatLoaded).koordinat, isNull);
+      slow.release(1);
+      await retry;
+
+      expect(
+        (controller.value as ShalatLoaded).koordinat?.latitude,
+        closeTo(-6.9175, 0.0001),
+      );
+      controller.dispose();
+    });
+
+    test(
+      'refreshKoordinat tanpa lokasi tersimpan tidak melakukan apa pun',
+      () async {
+        final slow = _SlowGeocoder({});
+        final controller = ShalatController(
+          remote: _FakeRemote(),
+          local: ShalatLocalDataSource(),
+          locationService: slow,
+          locationProvider: _FakeProvider(
+            const LocationUnavailable(LocationIssue.denied),
+          ),
+          connectivityCheck: () async => true,
+        );
+        await controller.init();
+
+        await controller.refreshKoordinat();
+
+        expect(slow.calls, isEmpty);
+        expect(controller.value, isA<ShalatNeedLocation>());
+        controller.dispose();
+      },
+    );
+  });
+
   // ── Error jadwal tidak membocorkan exception ──────────────────────────────
 
-  test('kegagalan jaringan tampil sebagai pesan ramah, bukan toString()',
-      () async {
-    final controller = build(
-      outcome: const LocationFix(-6.2, 106.8),
-      adminArea: 'DKI Jakarta',
-      locality: 'Jakarta Pusat',
-      failJadwal: true,
-    );
-    await controller.init();
-    await controller.detectLocation();
+  test(
+    'kegagalan jaringan tampil sebagai pesan ramah, bukan toString()',
+    () async {
+      final controller = build(
+        outcome: const LocationFix(-6.2, 106.8),
+        adminArea: 'DKI Jakarta',
+        locality: 'Jakarta Pusat',
+        failJadwal: true,
+      );
+      await controller.init();
+      await controller.detectLocation();
 
-    final state = controller.value;
-    expect(state, isA<ShalatError>());
-    final message = (state as ShalatError).message;
-    expect(message, isNot(contains('Exception')));
-    expect(message, isNotEmpty);
-    controller.dispose();
-  });
+      final state = controller.value;
+      expect(state, isA<ShalatError>());
+      final message = (state as ShalatError).message;
+      expect(message, isNot(contains('Exception')));
+      expect(message, isNotEmpty);
+      controller.dispose();
+    },
+  );
 }

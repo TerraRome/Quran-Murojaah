@@ -80,7 +80,8 @@ class AdzanNotifications {
       if (!granted) {
         return const AdzanResult(
           ok: false,
-          message: 'Izin notifikasi belum diberikan, jadi pengingat adzan '
+          message:
+              'Izin notifikasi belum diberikan, jadi pengingat adzan '
               'belum bisa dipasang.',
         );
       }
@@ -112,7 +113,8 @@ class AdzanNotifications {
         await _safeCancel();
         return const AdzanResult(
           ok: false,
-          message: 'Pengingat adzan tidak bisa dipasang di perangkat ini. '
+          message:
+              'Pengingat adzan tidak bisa dipasang di perangkat ini. '
               'Jadwal shalat tetap bisa dibaca seperti biasa.',
         );
       }
@@ -128,7 +130,8 @@ class AdzanNotifications {
       return const AdzanResult(
         ok: true,
         inexact: true,
-        message: 'Sistem tidak mengizinkan alarm eksak, jadi adzan bisa '
+        message:
+            'Sistem tidak mengizinkan alarm eksak, jadi adzan bisa '
             'berbunyi beberapa menit lebih lambat.',
       );
     }

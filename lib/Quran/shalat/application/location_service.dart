@@ -41,6 +41,30 @@ class LocationService {
     }
   }
 
+  /// Koordinat perkiraan untuk kota yang dipilih manual. Dipakai menghitung
+  /// arah kiblat saat perangkat tidak memberi GPS. Null bila tidak ketemu —
+  /// pemanggil hanya kehilangan arah kiblat, bukan jadwal shalat.
+  ///
+  /// Akurasi tingkat kota sudah cukup: galat 50 km hanya menggeser bearing
+  /// kiblat < 0,5 derajat.
+  Future<({double latitude, double longitude})?> coordinatesForCity(
+    String provinsi,
+    String kabkota,
+  ) async {
+    try {
+      final results = await locationFromAddress(
+        '$kabkota, $provinsi, Indonesia',
+      );
+      if (results.isEmpty) return null;
+      return (
+        latitude: results.first.latitude,
+        longitude: results.first.longitude,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fuzzy match nama administratif ke list provinsi dari API.
   /// Kembalikan null jika tidak ada match yang cukup dekat.
   String? matchProvinsi(String? adminArea, List<String> provinsiList) {
@@ -77,11 +101,15 @@ class LocationService {
   }
 
   /// Fuzzy match nama kota ke list kabkota dari API.
-  String? matchKabkota(String? locality, String? subAdmin, List<String> kabkotaList) {
-    final candidates = [locality, subAdmin]
-        .where((s) => s != null && s.isNotEmpty)
-        .cast<String>()
-        .toList();
+  String? matchKabkota(
+    String? locality,
+    String? subAdmin,
+    List<String> kabkotaList,
+  ) {
+    final candidates = [
+      locality,
+      subAdmin,
+    ].where((s) => s != null && s.isNotEmpty).cast<String>().toList();
 
     for (final query in candidates) {
       final q = _normalize(query);
@@ -93,18 +121,15 @@ class LocationService {
 
       // Contains match (strip "kab."/"kota." prefix dari API)
       for (final k in kabkotaList) {
-        final stripped = _normalize(k)
-            .replaceAll('kab.', '')
-            .replaceAll('kota', '')
-            .trim();
+        final stripped = _normalize(
+          k,
+        ).replaceAll('kab.', '').replaceAll('kota', '').trim();
         if (stripped.contains(q) || q.contains(stripped)) return k;
       }
     }
     return null;
   }
 
-  String _normalize(String s) => s
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
-      .trim();
+  String _normalize(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '').trim();
 }

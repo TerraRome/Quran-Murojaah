@@ -34,37 +34,37 @@ class LocationIssueCopy {
 }
 
 LocationIssueCopy copyForIssue(LocationIssue issue) => switch (issue) {
-      LocationIssue.serviceOff => const LocationIssueCopy(
-          'Lokasi perangkat mati',
-          'Nyalakan GPS atau layanan lokasi supaya jadwal shalat sesuai kota '
-              'Anda. Anda juga bisa memilih kota sendiri.',
-          LocationAction.openLocationSettings,
-        ),
-      LocationIssue.denied => const LocationIssueCopy(
-          'Izin lokasi belum diberikan',
-          'Tanpa izin lokasi, kami tidak bisa menebak kota Anda. Pilih kota '
-              'secara manual, atau coba izinkan lagi.',
-          LocationAction.retry,
-        ),
-      LocationIssue.deniedForever => const LocationIssueCopy(
-          'Izin lokasi diblokir',
-          'Izin lokasi dimatikan permanen untuk aplikasi ini. Buka pengaturan '
-              'aplikasi untuk mengizinkannya, atau pilih kota manual.',
-          LocationAction.openAppSettings,
-        ),
-      LocationIssue.timeout => const LocationIssueCopy(
-          'Lokasi lama ditemukan',
-          'Satelit tidak menjawab dalam 15 detik. Coba lagi di tempat terbuka, '
-              'atau pilih kota manual.',
-          LocationAction.retry,
-        ),
-      LocationIssue.failed => const LocationIssueCopy(
-          'Lokasi tidak terbaca',
-          'Perangkat tidak memberi lokasi saat ini. Pilih kota manual supaya '
-              'jadwal shalat tetap tampil.',
-          LocationAction.retry,
-        ),
-    };
+  LocationIssue.serviceOff => const LocationIssueCopy(
+    'Lokasi perangkat mati',
+    'Nyalakan GPS atau layanan lokasi supaya jadwal shalat sesuai kota '
+        'Anda. Anda juga bisa memilih kota sendiri.',
+    LocationAction.openLocationSettings,
+  ),
+  LocationIssue.denied => const LocationIssueCopy(
+    'Izin lokasi belum diberikan',
+    'Tanpa izin lokasi, kami tidak bisa menebak kota Anda. Pilih kota '
+        'secara manual, atau coba izinkan lagi.',
+    LocationAction.retry,
+  ),
+  LocationIssue.deniedForever => const LocationIssueCopy(
+    'Izin lokasi diblokir',
+    'Izin lokasi dimatikan permanen untuk aplikasi ini. Buka pengaturan '
+        'aplikasi untuk mengizinkannya, atau pilih kota manual.',
+    LocationAction.openAppSettings,
+  ),
+  LocationIssue.timeout => const LocationIssueCopy(
+    'Lokasi lama ditemukan',
+    'Satelit tidak menjawab dalam 15 detik. Coba lagi di tempat terbuka, '
+        'atau pilih kota manual.',
+    LocationAction.retry,
+  ),
+  LocationIssue.failed => const LocationIssueCopy(
+    'Lokasi tidak terbaca',
+    'Perangkat tidak memberi lokasi saat ini. Pilih kota manual supaya '
+        'jadwal shalat tetap tampil.',
+    LocationAction.retry,
+  ),
+};
 
 /// Sumber lokasi. Antarmuka tipis supaya test memakai penyedia palsu.
 abstract class LocationProvider {

@@ -41,15 +41,15 @@ class WaktuShalat {
 
   /// Get all waktu as list (nama, waktu string, DateTime).
   List<ShalatEntry> get allWaktu => [
-        ShalatEntry('Imsak', imsak, parseTime(imsak)),
-        ShalatEntry('Subuh', subuh, parseTime(subuh)),
-        ShalatEntry('Terbit', terbit, parseTime(terbit)),
-        ShalatEntry('Dhuha', dhuha, parseTime(dhuha)),
-        ShalatEntry('Dzuhur', dzuhur, parseTime(dzuhur)),
-        ShalatEntry('Ashar', ashar, parseTime(ashar)),
-        ShalatEntry('Maghrib', maghrib, parseTime(maghrib)),
-        ShalatEntry('Isya', isya, parseTime(isya)),
-      ];
+    ShalatEntry('Imsak', imsak, parseTime(imsak)),
+    ShalatEntry('Subuh', subuh, parseTime(subuh)),
+    ShalatEntry('Terbit', terbit, parseTime(terbit)),
+    ShalatEntry('Dhuha', dhuha, parseTime(dhuha)),
+    ShalatEntry('Dzuhur', dzuhur, parseTime(dzuhur)),
+    ShalatEntry('Ashar', ashar, parseTime(ashar)),
+    ShalatEntry('Maghrib', maghrib, parseTime(maghrib)),
+    ShalatEntry('Isya', isya, parseTime(isya)),
+  ];
 }
 
 /// Entry waktu shalat (nama, string waktu, DateTime).

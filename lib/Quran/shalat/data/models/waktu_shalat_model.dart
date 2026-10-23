@@ -45,30 +45,30 @@ class WaktuShalatModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'tanggal': tanggal,
-        'tanggal_lengkap': tanggalLengkap,
-        'hari': hari,
-        'imsak': imsak,
-        'subuh': subuh,
-        'terbit': terbit,
-        'dhuha': dhuha,
-        'dzuhur': dzuhur,
-        'ashar': ashar,
-        'maghrib': maghrib,
-        'isya': isya,
-      };
+    'tanggal': tanggal,
+    'tanggal_lengkap': tanggalLengkap,
+    'hari': hari,
+    'imsak': imsak,
+    'subuh': subuh,
+    'terbit': terbit,
+    'dhuha': dhuha,
+    'dzuhur': dzuhur,
+    'ashar': ashar,
+    'maghrib': maghrib,
+    'isya': isya,
+  };
 
   WaktuShalat toDomain() => WaktuShalat(
-        tanggal: tanggal,
-        tanggalLengkap: tanggalLengkap,
-        hari: hari,
-        imsak: imsak,
-        subuh: subuh,
-        terbit: terbit,
-        dhuha: dhuha,
-        dzuhur: dzuhur,
-        ashar: ashar,
-        maghrib: maghrib,
-        isya: isya,
-      );
+    tanggal: tanggal,
+    tanggalLengkap: tanggalLengkap,
+    hari: hari,
+    imsak: imsak,
+    subuh: subuh,
+    terbit: terbit,
+    dhuha: dhuha,
+    dzuhur: dzuhur,
+    ashar: ashar,
+    maghrib: maghrib,
+    isya: isya,
+  );
 }

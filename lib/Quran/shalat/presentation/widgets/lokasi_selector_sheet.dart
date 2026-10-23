@@ -49,7 +49,8 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Daftar provinsi belum bisa dimuat. Periksa koneksi internet Anda.';
+          _error =
+              'Daftar provinsi belum bisa dimuat. Periksa koneksi internet Anda.';
           _loadingProvinsi = false;
         });
       }
@@ -76,7 +77,8 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Daftar kota belum bisa dimuat. Periksa koneksi internet Anda.';
+          _error =
+              'Daftar kota belum bisa dimuat. Periksa koneksi internet Anda.';
           _loadingKabkota = false;
         });
       }
@@ -101,8 +103,7 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
         return Container(
           decoration: BoxDecoration(
             color: QuranTokens.background(dark),
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -125,18 +126,19 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                   children: [
                     Text(
                       'Pilih Lokasi',
-                      style: QuranTokens.poppins(
-                        QuranTokens.tsLastReadTitle,
-                      ).copyWith(
-                        color: QuranTokens.inkColor(dark),
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: QuranTokens.poppins(QuranTokens.tsLastReadTitle)
+                          .copyWith(
+                            color: QuranTokens.inkColor(dark),
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
                     const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: Icon(Icons.close,
-                          color: QuranTokens.secondaryColor(dark)),
+                      icon: Icon(
+                        Icons.close,
+                        color: QuranTokens.secondaryColor(dark),
+                      ),
                     ),
                   ],
                 ),
@@ -183,9 +185,7 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                     ),
                     const SizedBox(height: 8),
                     _loadingProvinsi
-                        ? const Center(
-                            child: CircularProgressIndicator(),
-                          )
+                        ? const Center(child: CircularProgressIndicator())
                         : _buildDropdown(
                             items: _provinsiList ?? [],
                             value: _selectedProvinsi,
@@ -211,23 +211,23 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                     _loadingKabkota
                         ? const Center(child: CircularProgressIndicator())
                         : _selectedProvinsi == null
-                            ? Text(
-                                'Pilih provinsi terlebih dahulu',
-                                style: QuranTokens.poppins(
-                                  TextStyle(
-                                    fontSize: 13,
-                                    color: QuranTokens.secondaryColor(dark),
-                                  ),
-                                ),
-                              )
-                            : _buildDropdown(
-                                items: _kabkotaList ?? [],
-                                value: _selectedKabkota,
-                                hint: 'Pilih kabupaten/kota...',
-                                onChanged: (val) => setState(
-                                    () => _selectedKabkota = val),
-                                dark: dark,
+                        ? Text(
+                            'Pilih provinsi terlebih dahulu',
+                            style: QuranTokens.poppins(
+                              TextStyle(
+                                fontSize: 13,
+                                color: QuranTokens.secondaryColor(dark),
                               ),
+                            ),
+                          )
+                        : _buildDropdown(
+                            items: _kabkotaList ?? [],
+                            value: _selectedKabkota,
+                            hint: 'Pilih kabupaten/kota...',
+                            onChanged: (val) =>
+                                setState(() => _selectedKabkota = val),
+                            dark: dark,
+                          ),
 
                     const SizedBox(height: 28),
 
@@ -235,17 +235,18 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: (_selectedProvinsi != null &&
+                        onPressed:
+                            (_selectedProvinsi != null &&
                                 _selectedKabkota != null)
                             ? _onConfirm
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: QuranTokens.brandOf(context),
                           foregroundColor: QuranTokens.onBrandOf(context),
-                          disabledBackgroundColor:
-                              QuranTokens.brandOf(context).withValues(alpha: 0.4),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14),
+                          disabledBackgroundColor: QuranTokens.brandOf(
+                            context,
+                          ).withValues(alpha: 0.4),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -300,10 +301,7 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
             TextStyle(fontSize: 14, color: QuranTokens.inkColor(dark)),
           ),
           items: items
-              .map((item) => DropdownMenuItem(
-                    value: item,
-                    child: Text(item),
-                  ))
+              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
               .toList(),
           onChanged: onChanged,
         ),

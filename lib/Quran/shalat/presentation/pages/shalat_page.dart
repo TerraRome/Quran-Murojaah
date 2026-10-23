@@ -3,16 +3,25 @@ import 'package:flutter/material.dart';
 import '../../../data/quran_tokens.dart';
 import '../../../presentation/widgets/quran_status_bar.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
+import '../../application/compass_provider.dart';
 import '../../application/location_provider.dart';
 import '../../application/shalat_controller.dart';
 import '../../domain/entities/waktu_shalat.dart';
+import '../widgets/kiblat_card.dart';
 import '../widgets/lokasi_selector_sheet.dart';
 
 /// Halaman jadwal shalat: hari ini + countdown + kalender satu bulan.
 class ShalatPage extends StatefulWidget {
-  const ShalatPage({super.key, required this.controller});
+  const ShalatPage({
+    super.key,
+    required this.controller,
+    this.compass = const PluginCompassProvider(),
+  });
 
   final ShalatController controller;
+
+  /// Sumber heading kompas; bisa dipalsukan di test.
+  final CompassProvider compass;
 
   @override
   State<ShalatPage> createState() => _ShalatPageState();
@@ -38,8 +47,11 @@ class _ShalatPageState extends State<ShalatPage> {
             builder: (context, state, _) {
               return switch (state) {
                 ShalatLoading() => _buildLoading(dark),
-                ShalatNeedLocation() =>
-                  _buildNeedLocation(context, state, dark),
+                ShalatNeedLocation() => _buildNeedLocation(
+                  context,
+                  state,
+                  dark,
+                ),
                 ShalatLoaded() => _buildLoaded(context, state, dark),
                 ShalatError() => _buildError(context, state.message, dark),
               };
@@ -61,8 +73,9 @@ class _ShalatPageState extends State<ShalatPage> {
           const SizedBox(height: 16),
           Text(
             'Memuat jadwal shalat...',
-            style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                .copyWith(color: QuranTokens.secondaryColor(dark)),
+            style: QuranTokens.poppins(
+              QuranTokens.tsSurahMeta,
+            ).copyWith(color: QuranTokens.secondaryColor(dark)),
           ),
         ],
       ),
@@ -72,15 +85,21 @@ class _ShalatPageState extends State<ShalatPage> {
   // ── Need location ─────────────────────────────────────────────────────────
 
   Widget _buildNeedLocation(
-      BuildContext context, ShalatNeedLocation state, bool dark) {
+    BuildContext context,
+    ShalatNeedLocation state,
+    bool dark,
+  ) {
     final issue = state.issue;
     final copy = issue == null ? null : copyForIssue(issue);
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
         const SizedBox(height: 24),
-        Icon(Icons.location_on_outlined,
-            size: 64, color: QuranTokens.brandColor(dark)),
+        Icon(
+          Icons.location_on_outlined,
+          size: 64,
+          color: QuranTokens.brandColor(dark),
+        ),
         const SizedBox(height: 16),
         Text(
           copy?.title ?? 'Izinkan Akses Lokasi',
@@ -95,8 +114,9 @@ class _ShalatPageState extends State<ShalatPage> {
           copy?.body ??
               'Lokasi dipakai sekali untuk mencocokkan kota Anda dengan jadwal '
                   'shalat. Anda juga bisa memilih kota sendiri.',
-          style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
-              .copyWith(color: QuranTokens.secondaryColor(dark)),
+          style: QuranTokens.poppins(
+            QuranTokens.tsLastReadSub,
+          ).copyWith(color: QuranTokens.secondaryColor(dark)),
           textAlign: TextAlign.center,
         ),
         if (state.detail != null) ...[
@@ -111,14 +131,18 @@ class _ShalatPageState extends State<ShalatPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline,
-                    size: 18, color: QuranTokens.brandColor(dark)),
+                Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: QuranTokens.brandColor(dark),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     state.detail!,
-                    style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
-                        .copyWith(color: QuranTokens.secondaryColor(dark)),
+                    style: QuranTokens.poppins(
+                      QuranTokens.tsLastReadSub,
+                    ).copyWith(color: QuranTokens.secondaryColor(dark)),
                   ),
                 ),
               ],
@@ -192,15 +216,20 @@ class _ShalatPageState extends State<ShalatPage> {
 
   /// Tombol aksi sesuai jenis masalah lokasi (ikon + label, tinggi ≥48px).
   List<Widget> _issueActions(
-      BuildContext context, LocationAction? action, bool dark) {
+    BuildContext context,
+    LocationAction? action,
+    bool dark,
+  ) {
     final gps = SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
         onPressed: () => _requestGps(dark),
         icon: const Icon(Icons.my_location),
-        label: Text(action == LocationAction.retry
-            ? 'Coba Deteksi Lagi'
-            : 'Gunakan Lokasi GPS'),
+        label: Text(
+          action == LocationAction.retry
+              ? 'Coba Deteksi Lagi'
+              : 'Gunakan Lokasi GPS',
+        ),
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
           backgroundColor: QuranTokens.brandOf(context),
@@ -214,21 +243,24 @@ class _ShalatPageState extends State<ShalatPage> {
 
     final secondary = switch (action) {
       LocationAction.openAppSettings => _secondaryButton(
-          dark,
-          icon: Icons.settings_outlined,
-          label: 'Buka Pengaturan Aplikasi',
-          onPressed: widget.controller.openAppSettings,
-        ),
+        dark,
+        icon: Icons.settings_outlined,
+        label: 'Buka Pengaturan Aplikasi',
+        onPressed: widget.controller.openAppSettings,
+      ),
       LocationAction.openLocationSettings => _secondaryButton(
-          dark,
-          icon: Icons.location_on_outlined,
-          label: 'Buka Pengaturan Lokasi',
-          onPressed: widget.controller.openLocationSettings,
-        ),
+        dark,
+        icon: Icons.location_on_outlined,
+        label: 'Buka Pengaturan Lokasi',
+        onPressed: widget.controller.openLocationSettings,
+      ),
       _ => null,
     };
 
-    return [gps, if (secondary != null) ...[const SizedBox(height: 12), secondary]];
+    return [
+      gps,
+      if (secondary != null) ...[const SizedBox(height: 12), secondary],
+    ];
   }
 
   Widget _secondaryButton(
@@ -236,28 +268,26 @@ class _ShalatPageState extends State<ShalatPage> {
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
-  }) =>
-      SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(label),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-            foregroundColor: QuranTokens.brandColor(dark),
-            side: BorderSide(color: QuranTokens.brandColor(dark)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
-            ),
-          ),
+  }) => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        foregroundColor: QuranTokens.brandColor(dark),
+        side: BorderSide(color: QuranTokens.brandColor(dark)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
         ),
-      );
+      ),
+    ),
+  );
 
   // ── Loaded ────────────────────────────────────────────────────────────────
 
-  Widget _buildLoaded(
-      BuildContext context, ShalatLoaded state, bool dark) {
+  Widget _buildLoaded(BuildContext context, ShalatLoaded state, bool dark) {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeader(context, state, dark)),
@@ -265,14 +295,19 @@ class _ShalatPageState extends State<ShalatPage> {
           SliverToBoxAdapter(
             child: _buildLocationNotice(context, state.locationIssue!, dark),
           ),
+        SliverToBoxAdapter(child: _buildCountdownCard(state, dark)),
         SliverToBoxAdapter(
-            child: _buildCountdownCard(state, dark)),
-        SliverToBoxAdapter(
-            child: _buildTodayGrid(state, dark)),
-        SliverToBoxAdapter(
-            child: _buildMonthNavigation(context, state, dark)),
-        SliverToBoxAdapter(
-            child: _buildMonthlyCalendar(state, dark)),
+          child: KiblatCard(
+            koordinat: state.koordinat,
+            dark: dark,
+            compass: widget.compass,
+            onDetectLocation: () => _requestGps(dark),
+            onRetry: () => widget.controller.refreshKoordinat(),
+          ),
+        ),
+        SliverToBoxAdapter(child: _buildTodayGrid(state, dark)),
+        SliverToBoxAdapter(child: _buildMonthNavigation(context, state, dark)),
+        SliverToBoxAdapter(child: _buildMonthlyCalendar(state, dark)),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
@@ -280,8 +315,7 @@ class _ShalatPageState extends State<ShalatPage> {
 
   // ── Header ────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(
-      BuildContext context, ShalatLoaded state, bool dark) {
+  Widget _buildHeader(BuildContext context, ShalatLoaded state, bool dark) {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -297,8 +331,7 @@ class _ShalatPageState extends State<ShalatPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.mosque_outlined,
-                  color: Colors.white, size: 20),
+              const Icon(Icons.mosque_outlined, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -368,11 +401,7 @@ class _ShalatPageState extends State<ShalatPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.info_outline,
-                  size: 14,
-                  color: Colors.white,
-                ),
+                const Icon(Icons.info_outline, size: 14, color: Colors.white),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -409,8 +438,9 @@ class _ShalatPageState extends State<ShalatPage> {
           child: Text(
             'Semua waktu shalat hari ini telah berlalu.',
             textAlign: TextAlign.center,
-            style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                .copyWith(color: QuranTokens.secondaryColor(dark)),
+            style: QuranTokens.poppins(
+              QuranTokens.tsSurahMeta,
+            ).copyWith(color: QuranTokens.secondaryColor(dark)),
           ),
         ),
       );
@@ -433,8 +463,9 @@ class _ShalatPageState extends State<ShalatPage> {
           children: [
             Text(
               'Waktu Shalat Berikutnya',
-              style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                  .copyWith(color: QuranTokens.secondaryColor(dark)),
+              style: QuranTokens.poppins(
+                QuranTokens.tsSurahMeta,
+              ).copyWith(color: QuranTokens.secondaryColor(dark)),
             ),
             const SizedBox(height: 4),
             Text(
@@ -481,7 +512,8 @@ class _ShalatPageState extends State<ShalatPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SectionTitle(
-            title: 'Hari Ini · ${today.hari}, ${today.tanggal} ${state.jadwal.bulanNama}',
+            title:
+                'Hari Ini · ${today.hari}, ${today.tanggal} ${state.jadwal.bulanNama}',
             dark: dark,
           ),
           const SizedBox(height: 8),
@@ -515,7 +547,10 @@ class _ShalatPageState extends State<ShalatPage> {
   // ── Month navigation ──────────────────────────────────────────────────────
 
   Widget _buildMonthNavigation(
-      BuildContext context, ShalatLoaded state, bool dark) {
+    BuildContext context,
+    ShalatLoaded state,
+    bool dark,
+  ) {
     final jadwal = state.jadwal;
     final now = DateTime.now();
     final isCurrentMonth =
@@ -526,15 +561,16 @@ class _ShalatPageState extends State<ShalatPage> {
       child: Row(
         children: [
           _SectionTitle(
-              title: '${jadwal.bulanNama} ${jadwal.tahun}', dark: dark),
+            title: '${jadwal.bulanNama} ${jadwal.tahun}',
+            dark: dark,
+          ),
           const Spacer(),
           IconButton(
             onPressed: () {
               final prev = DateTime(jadwal.tahun, jadwal.bulan - 1);
               widget.controller.loadBulan(prev.month, prev.year);
             },
-            icon:
-                Icon(Icons.chevron_left, color: QuranTokens.inkColor(dark)),
+            icon: Icon(Icons.chevron_left, color: QuranTokens.inkColor(dark)),
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
@@ -556,8 +592,7 @@ class _ShalatPageState extends State<ShalatPage> {
               final next = DateTime(jadwal.tahun, jadwal.bulan + 1);
               widget.controller.loadBulan(next.month, next.year);
             },
-            icon:
-                Icon(Icons.chevron_right, color: QuranTokens.inkColor(dark)),
+            icon: Icon(Icons.chevron_right, color: QuranTokens.inkColor(dark)),
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -604,7 +639,10 @@ class _ShalatPageState extends State<ShalatPage> {
   /// Catatan ramah saat deteksi GPS gagal padahal jadwal sudah tampil dari
   /// lokasi tersimpan. Tidak menghalangi apa pun — hanya informasi + aksi.
   Widget _buildLocationNotice(
-      BuildContext context, LocationIssue issue, bool dark) {
+    BuildContext context,
+    LocationIssue issue,
+    bool dark,
+  ) {
     final copy = copyForIssue(issue);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -620,8 +658,11 @@ class _ShalatPageState extends State<ShalatPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.location_off_outlined,
-                  size: 20, color: QuranTokens.brandColor(dark)),
+              Icon(
+                Icons.location_off_outlined,
+                size: 20,
+                color: QuranTokens.brandColor(dark),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -631,16 +672,17 @@ class _ShalatPageState extends State<ShalatPage> {
                       copy.title,
                       style: QuranTokens.poppins(QuranTokens.tsLastReadTag)
                           .copyWith(
-                        color: QuranTokens.inkColor(dark),
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: QuranTokens.inkColor(dark),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Jadwal di bawah memakai lokasi tersimpan '
                       '(${copy.body})',
-                      style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
-                          .copyWith(color: QuranTokens.textMuted(dark)),
+                      style: QuranTokens.poppins(
+                        QuranTokens.tsLastReadSub,
+                      ).copyWith(color: QuranTokens.textMuted(dark)),
                     ),
                   ],
                 ),
@@ -700,14 +742,18 @@ class _ShalatPageState extends State<ShalatPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline,
-                size: 48, color: QuranTokens.secondaryColor(dark)),
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: QuranTokens.secondaryColor(dark),
+            ),
             const SizedBox(height: 12),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                  .copyWith(color: QuranTokens.secondaryColor(dark)),
+              style: QuranTokens.poppins(
+                QuranTokens.tsSurahMeta,
+              ).copyWith(color: QuranTokens.secondaryColor(dark)),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
@@ -738,10 +784,8 @@ class _ShalatPageState extends State<ShalatPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => LokasiSelectorSheet(
-        controller: widget.controller,
-        dark: dark,
-      ),
+      builder: (_) =>
+          LokasiSelectorSheet(controller: widget.controller, dark: dark),
     );
   }
 }
@@ -769,8 +813,11 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _CountdownUnit extends StatelessWidget {
-  const _CountdownUnit(
-      {required this.value, required this.label, required this.dark});
+  const _CountdownUnit({
+    required this.value,
+    required this.label,
+    required this.dark,
+  });
   final String value;
   final String label;
   final bool dark;
@@ -864,10 +911,7 @@ class _WaktuCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: isNext
             ? null
-            : Border.all(
-                color: QuranTokens.divider(dark),
-                width: 1,
-              ),
+            : Border.all(color: QuranTokens.divider(dark), width: 1),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -881,8 +925,8 @@ class _WaktuCard extends StatelessWidget {
                 color: isNext
                     ? Colors.white
                     : isPast
-                        ? QuranTokens.secondaryColor(dark)
-                        : QuranTokens.inkColor(dark),
+                    ? QuranTokens.secondaryColor(dark)
+                    : QuranTokens.inkColor(dark),
               ),
             ),
           ),
@@ -896,8 +940,8 @@ class _WaktuCard extends StatelessWidget {
                 color: isNext
                     ? Colors.white
                     : isPast
-                        ? QuranTokens.secondaryColor(dark)
-                        : QuranTokens.brandColor(dark),
+                    ? QuranTokens.secondaryColor(dark)
+                    : QuranTokens.brandColor(dark),
               ),
             ),
           ),
@@ -912,8 +956,15 @@ class _CalendarHeaderRow extends StatelessWidget {
   final bool dark;
 
   static const _headers = [
-    'Tgl', 'Imsak', 'Subuh', 'Terbit',
-    'Dhuha', 'Dzuhur', 'Ashar', 'Maghrib', 'Isya'
+    'Tgl',
+    'Imsak',
+    'Subuh',
+    'Terbit',
+    'Dhuha',
+    'Dzuhur',
+    'Ashar',
+    'Maghrib',
+    'Isya',
   ];
 
   @override
@@ -982,12 +1033,12 @@ class _CalendarDataRow extends StatelessWidget {
                 style: QuranTokens.poppins(
                   TextStyle(
                     fontSize: 9,
-                    fontWeight:
-                        isToday ? FontWeight.w700 : FontWeight.w400,
+                    fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
                     color: isDate && isToday
                         ? QuranTokens.brandColor(dark)
-                        : QuranTokens.inkColor(dark)
-                            .withValues(alpha: isToday ? 1.0 : 0.85),
+                        : QuranTokens.inkColor(
+                            dark,
+                          ).withValues(alpha: isToday ? 1.0 : 0.85),
                   ),
                 ),
               ),

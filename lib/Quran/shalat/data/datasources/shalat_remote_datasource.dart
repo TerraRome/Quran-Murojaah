@@ -28,13 +28,13 @@ class ShalatRemoteDataSourceImpl implements ShalatRemoteDataSource {
   static const String _baseUrl = 'https://equran.id/api/v2';
 
   static Dio _buildDio() => Dio(
-        BaseOptions(
-          baseUrl: _baseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 30),
-          headers: {'Accept': 'application/json'},
-        ),
-      );
+    BaseOptions(
+      baseUrl: _baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Accept': 'application/json'},
+    ),
+  );
 
   @override
   Future<List<String>> getProvinsi() async {

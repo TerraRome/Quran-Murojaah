@@ -35,20 +35,20 @@ class JadwalShalatModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'provinsi': provinsi,
-        'kabkota': kabkota,
-        'bulan': bulan,
-        'tahun': tahun,
-        'bulan_nama': bulanNama,
-        'jadwal': jadwal.map((w) => w.toJson()).toList(),
-      };
+    'provinsi': provinsi,
+    'kabkota': kabkota,
+    'bulan': bulan,
+    'tahun': tahun,
+    'bulan_nama': bulanNama,
+    'jadwal': jadwal.map((w) => w.toJson()).toList(),
+  };
 
   JadwalShalat toDomain() => JadwalShalat(
-        provinsi: provinsi,
-        kabkota: kabkota,
-        bulan: bulan,
-        tahun: tahun,
-        bulanNama: bulanNama,
-        jadwal: jadwal.map((w) => w.toDomain()).toList(),
-      );
+    provinsi: provinsi,
+    kabkota: kabkota,
+    bulan: bulan,
+    tahun: tahun,
+    bulanNama: bulanNama,
+    jadwal: jadwal.map((w) => w.toDomain()).toList(),
+  );
 }

@@ -41,6 +41,7 @@ class ShalatLoaded extends ShalatState {
     this.isOffline = false,
     this.locationIssue,
     this.notifMessage,
+    this.koordinat,
   });
 
   final JadwalShalat jadwal;
@@ -63,6 +64,9 @@ class ShalatLoaded extends ShalatState {
   /// dipasang). Null = tidak ada yang perlu dikatakan.
   final String? notifMessage;
 
+  /// Koordinat kota terpilih. Null = arah kiblat belum bisa dihitung.
+  final ({double latitude, double longitude})? koordinat;
+
   String get lokasi => '${jadwal.kabkota}, ${jadwal.provinsi}';
 
   ShalatLoaded copyWith({
@@ -77,21 +81,21 @@ class ShalatLoaded extends ShalatState {
     bool clearLocationIssue = false,
     String? notifMessage,
     bool clearNotifMessage = false,
-  }) =>
-      ShalatLoaded(
-        jadwal: jadwal ?? this.jadwal,
-        today: today ?? this.today,
-        nextWaktu: clearNextWaktu ? null : nextWaktu ?? this.nextWaktu,
-        countdown: countdown ?? this.countdown,
-        notifEnabled: notifEnabled ?? this.notifEnabled,
-        isOffline: isOffline ?? this.isOffline,
-        locationIssue: clearLocationIssue
-            ? null
-            : locationIssue ?? this.locationIssue,
-        notifMessage: clearNotifMessage
-            ? null
-            : notifMessage ?? this.notifMessage,
-      );
+    ({double latitude, double longitude})? koordinat,
+    bool clearKoordinat = false,
+  }) => ShalatLoaded(
+    jadwal: jadwal ?? this.jadwal,
+    today: today ?? this.today,
+    nextWaktu: clearNextWaktu ? null : nextWaktu ?? this.nextWaktu,
+    countdown: countdown ?? this.countdown,
+    notifEnabled: notifEnabled ?? this.notifEnabled,
+    isOffline: isOffline ?? this.isOffline,
+    locationIssue: clearLocationIssue
+        ? null
+        : locationIssue ?? this.locationIssue,
+    notifMessage: clearNotifMessage ? null : notifMessage ?? this.notifMessage,
+    koordinat: clearKoordinat ? null : koordinat ?? this.koordinat,
+  );
 }
 
 class ShalatError extends ShalatState {
@@ -117,15 +121,14 @@ class ShalatController extends ValueNotifier<ShalatState> {
     LocationProvider locationProvider = const GeolocatorLocationProvider(),
     Future<bool> Function()? connectivityCheck,
     AdzanNotifications? notifications,
-  })  : _remote = remote,
-        _local = local,
-        _locationService = locationService,
-        _locationProvider = locationProvider,
-        _connectivityCheck = connectivityCheck,
-        _notifications =
-            notifications ??
-            const AdzanNotifications(PluginAdzanScheduler()),
-        super(const ShalatLoading());
+  }) : _remote = remote,
+       _local = local,
+       _locationService = locationService,
+       _locationProvider = locationProvider,
+       _connectivityCheck = connectivityCheck,
+       _notifications =
+           notifications ?? const AdzanNotifications(PluginAdzanScheduler()),
+       super(const ShalatLoading());
 
   final ShalatRemoteDataSource _remote;
   final ShalatLocalDataSource _local;
@@ -138,6 +141,10 @@ class ShalatController extends ValueNotifier<ShalatState> {
 
   Timer? _countdownTimer;
 
+  /// Nomor permintaan koordinat terakhir. Hasil geocode yang datang setelah
+  /// pengguna memilih kota lain diabaikan (tidak menimpa hasil baru).
+  int _koordinatRequest = 0;
+
   /// Cache in-memory untuk list provinsi dan kabkota.
   List<String>? _cachedProvinsi;
   final Map<String, List<String>> _cachedKabkota = {};
@@ -148,10 +155,7 @@ class ShalatController extends ValueNotifier<ShalatState> {
     value = const ShalatLoading();
     final saved = await _local.getSavedLokasi();
     if (saved.provinsi != null && saved.kabkota != null) {
-      await _loadJadwal(
-        provinsi: saved.provinsi!,
-        kabkota: saved.kabkota!,
-      );
+      await _loadJadwal(provinsi: saved.provinsi!, kabkota: saved.kabkota!);
     } else {
       value = const ShalatNeedLocation();
     }
@@ -209,13 +213,17 @@ class ShalatController extends ValueNotifier<ShalatState> {
         _failLocation(
           LocationIssue.failed,
           previous: previous,
-          detail: 'Provinsi terdeteksi: $matchedProvinsi. '
+          detail:
+              'Provinsi terdeteksi: $matchedProvinsi. '
               'Pilih kabupaten/kota manual.',
         );
         return;
       }
 
       await _local.saveLokasi(matchedProvinsi, matchedKabkota);
+      // GPS mengalahkan geocode yang mungkin masih berjalan.
+      _koordinatRequest++;
+      await _local.saveKoordinat(fix.latitude, fix.longitude);
       await _loadJadwal(provinsi: matchedProvinsi, kabkota: matchedKabkota);
     } catch (_) {
       _failLocation(LocationIssue.failed, previous: previous);
@@ -247,12 +255,53 @@ class ShalatController extends ValueNotifier<ShalatState> {
 
   Future<List<String>> getProvinsi() => _getProvinsi();
 
-  Future<List<String>> getKabkota(String provinsi) =>
-      _getKabkota(provinsi);
+  Future<List<String>> getKabkota(String provinsi) => _getKabkota(provinsi);
 
   Future<void> setLokasi(String provinsi, String kabkota) async {
+    final request = ++_koordinatRequest;
     await _local.saveLokasi(provinsi, kabkota);
+    // Koordinat kota lama dibuang segera: arah kiblat tidak boleh menunjuk
+    // kota sebelumnya selama geocoding berjalan.
+    await _local.clearKoordinat();
+    final state = value;
+    if (state is ShalatLoaded) {
+      value = state.copyWith(clearKoordinat: true);
+    }
+
+    // Koordinat hanya untuk arah kiblat. Gagal geocode = kiblat minta GPS,
+    // jadwal shalat tetap jalan.
+    final coords = await _locationService.coordinatesForCity(provinsi, kabkota);
+    if (request != _koordinatRequest) return; // pengguna sudah pilih kota lain
+
+    if (coords != null) {
+      await _local.saveKoordinat(coords.latitude, coords.longitude);
+    }
     await _loadJadwal(provinsi: provinsi, kabkota: kabkota);
+  }
+
+  /// Cari ulang koordinat kota tersimpan, mis. setelah sebelumnya offline.
+  /// Tidak pernah melempar; gagal = arah kiblat tetap minta lokasi.
+  Future<void> refreshKoordinat() async {
+    final saved = await _local.getSavedLokasi();
+    final provinsi = saved.provinsi;
+    final kabkota = saved.kabkota;
+    if (provinsi == null || kabkota == null) return;
+
+    final request = ++_koordinatRequest;
+    await _local.clearKoordinat();
+    final state = value;
+    if (state is ShalatLoaded) {
+      value = state.copyWith(clearKoordinat: true);
+    }
+
+    final coords = await _locationService.coordinatesForCity(provinsi, kabkota);
+    if (request != _koordinatRequest || coords == null) return;
+
+    await _local.saveKoordinat(coords.latitude, coords.longitude);
+    final current = value;
+    if (current is ShalatLoaded) {
+      value = current.copyWith(koordinat: coords);
+    }
   }
 
   // ── Load jadwal ───────────────────────────────────────────────────────────
@@ -300,10 +349,12 @@ class ShalatController extends ValueNotifier<ShalatState> {
       }
 
       final notifEnabled = await _local.isNotifEnabled();
+      final koordinat = await _local.getKoordinat();
       final today = jadwal.today;
       final nextWaktu = _findNextWaktu(today);
-      final countdown =
-          nextWaktu != null ? nextWaktu.dateTime.difference(now) : Duration.zero;
+      final countdown = nextWaktu != null
+          ? nextWaktu.dateTime.difference(now)
+          : Duration.zero;
 
       value = ShalatLoaded(
         jadwal: jadwal,
@@ -312,6 +363,7 @@ class ShalatController extends ValueNotifier<ShalatState> {
         countdown: countdown,
         notifEnabled: notifEnabled,
         isOffline: isOffline,
+        koordinat: koordinat,
       );
 
       _startCountdown();
@@ -403,19 +455,13 @@ class ShalatController extends ValueNotifier<ShalatState> {
         return;
       }
       await _local.setNotifEnabled(true);
-      value = state.copyWith(
-        notifEnabled: true,
-        notifMessage: result.message,
-      );
+      value = state.copyWith(notifEnabled: true, notifMessage: result.message);
       return;
     }
 
     await _local.setNotifEnabled(false);
     await _notifications.disable();
-    value = state.copyWith(
-      notifEnabled: false,
-      clearNotifMessage: true,
-    );
+    value = state.copyWith(notifEnabled: false, clearNotifMessage: true);
   }
 
   // ── Countdown timer ───────────────────────────────────────────────────────
@@ -438,10 +484,7 @@ class ShalatController extends ValueNotifier<ShalatState> {
       final diff = next.dateTime.difference(now);
       if (diff.isNegative) {
         // Waktu sudah lewat, cari yang berikutnya
-        value = state.copyWith(
-          nextWaktu: next,
-          countdown: Duration.zero,
-        );
+        value = state.copyWith(nextWaktu: next, countdown: Duration.zero);
       } else {
         value = state.copyWith(nextWaktu: next, countdown: diff);
       }
@@ -477,10 +520,12 @@ class ShalatController extends ValueNotifier<ShalatState> {
     if (override != null) return override();
     try {
       final results = await Connectivity().checkConnectivity();
-      return results.any((r) =>
-          r == ConnectivityResult.mobile ||
-          r == ConnectivityResult.wifi ||
-          r == ConnectivityResult.ethernet);
+      return results.any(
+        (r) =>
+            r == ConnectivityResult.mobile ||
+            r == ConnectivityResult.wifi ||
+            r == ConnectivityResult.ethernet,
+      );
     } catch (_) {
       return false;
     }

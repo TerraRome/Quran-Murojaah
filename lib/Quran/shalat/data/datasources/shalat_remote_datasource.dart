@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../data/network/dio_error_message.dart';
 import '../models/jadwal_shalat_model.dart';
 
 /// Remote data source untuk API equran.id/api/v2/shalat.
@@ -48,7 +49,7 @@ class ShalatRemoteDataSourceImpl implements ShalatRemoteDataSource {
       }
       return data.map((e) => e.toString()).toList();
     } on DioException catch (e) {
-      throw ShalatApiException(_mapDioError(e));
+      throw ShalatApiException(dioErrorMessage(e));
     }
   }
 
@@ -68,7 +69,7 @@ class ShalatRemoteDataSourceImpl implements ShalatRemoteDataSource {
       }
       return data.map((e) => e.toString()).toList();
     } on DioException catch (e) {
-      throw ShalatApiException(_mapDioError(e));
+      throw ShalatApiException(dioErrorMessage(e));
     }
   }
 
@@ -106,22 +107,7 @@ class ShalatRemoteDataSourceImpl implements ShalatRemoteDataSource {
 
       return JadwalShalatModel.fromJson(dataMap);
     } on DioException catch (e) {
-      throw ShalatApiException(_mapDioError(e));
-    }
-  }
-
-  String _mapDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Koneksi timeout. Periksa koneksi internet Anda.';
-      case DioExceptionType.connectionError:
-        return 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
-      case DioExceptionType.badResponse:
-        final status = e.response?.statusCode;
-        return 'Server mengembalikan error $status.';
-      default:
-        return 'Terjadi kesalahan jaringan: ${e.message}';
+      throw ShalatApiException(dioErrorMessage(e));
     }
   }
 }

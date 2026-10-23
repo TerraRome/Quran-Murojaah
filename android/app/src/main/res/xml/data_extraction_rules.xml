@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cadangan otomatis Android 12+ (dataExtractionRules).
+
+  Hanya SharedPreferences yang disertakan. Plugin shared_preferences menyimpan
+  ke berkas "FlutterSharedPreferences" (DataStore untuk API baru, XML untuk API
+  lama), keduanya di bawah sharedpref/ — jadi satu aturan sudah mencakup log
+  murojaah, target, tema, ukuran font, pengaturan pengingat, lokasi shalat, dan
+  posisi baca terakhir.
+
+  Karena daftar include bersifat eksklusif, model ASR unduhan
+  (app_flutter/recite_quran_assets), audio murottal (app_flutter/murottal), dan
+  cache otomatis tidak ikut — besar dan bisa diunduh ulang.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

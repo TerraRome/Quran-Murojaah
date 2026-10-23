@@ -1,11 +1,12 @@
 import 'package:go_router/go_router.dart';
 
 import 'application/quran_dependencies.dart';
+import 'murojaah/presentation/pages/hafalan_map_page.dart';
 import 'murojaah/recite/recite_murojaah_page.dart';
 import 'murottal/presentation/pages/murottal_settings_page.dart';
-import 'presentation/pages/font_size_settings.dart';
 import 'presentation/pages/quran_home_page.dart';
 import 'presentation/pages/quran_splash_page.dart';
+import 'presentation/pages/settings_page.dart';
 import 'presentation/pages/surah_detail_page.dart';
 import 'presentation/widgets/quran_theme_scope.dart';
 
@@ -18,8 +19,9 @@ import 'presentation/widgets/quran_theme_scope.dart';
 ///   /                                        → QuranSplashPage
 ///   /home/quran/home                         → QuranHomePage
 ///   /home/quran/surah/:number                → SurahDetailPage
-///   /home/quran/settings                     → FontSizeSettings
+///   /home/quran/settings                     → SettingsPage
 ///   /home/quran/murottal-settings            → MurottalSettingsPage
+///   /home/quran/murojaah/map                 → HafalanMapPage
 ///   /home/quran/murojaah/surah/:number       → ReciteMurojaahPage
 final GoRouter quranRouter = GoRouter(
   initialLocation: '/',
@@ -53,11 +55,18 @@ final GoRouter quranRouter = GoRouter(
         ),
         GoRoute(
           path: '/home/quran/settings',
-          builder: (context, state) => const FontSizeSettings(),
+          builder: (context, state) => const SettingsPage(),
         ),
         GoRoute(
           path: '/home/quran/murottal-settings',
           builder: (context, state) => const MurottalSettingsPage(),
+        ),
+        GoRoute(
+          path: '/home/quran/murojaah/map',
+          builder: (context, state) => HafalanMapPage(
+            controller: QuranDependencies.controller,
+            progress: QuranDependencies.murojaahProgress,
+          ),
         ),
         GoRoute(
           path: '/home/quran/murojaah/surah/:number',

@@ -257,6 +257,28 @@ class _ShalatPageState extends State<ShalatPage> {
               ],
             ),
           ],
+          if (state.notifMessage != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    state.notifMessage!,
+                    style: QuranTokens.poppins(
+                      const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -728,7 +750,7 @@ class _CalendarDataRow extends StatelessWidget {
     required this.dark,
   });
 
-  final dynamic waktu;
+  final WaktuShalat waktu;
   final bool isToday;
   final bool dark;
 

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'activity_entry.dart';
 import 'activity_store.dart';
+import 'hafalan_map.dart';
 import 'progress_service.dart';
 import 'record_result.dart';
 
@@ -15,9 +16,16 @@ class MurojaahProgressController extends ChangeNotifier {
   MurojaahProgressController({ActivityStore store = const PrefsActivityStore()})
     : _store = store;
 
-  static const _keyGoal = 'quran_murojaah_goal_verses';
+  /// Kunci prefs target harian — dipakai juga oleh ekspor/impor cadangan.
+  static const keyGoal = 'quran_murojaah_goal_verses';
 
   final ActivityStore _store;
+
+  /// Dipanggil setelah satu entri tercatat, dengan hasil dan status hari ini.
+  ///
+  /// Dipakai pengingat harian supaya jadwal bergeser karena hasil nyata
+  /// ([RecordResult]), bukan tebakan dari timer.
+  void Function(RecordResult result, bool activeToday)? onRecorded;
 
   List<ActivityEntry> _entries = const [];
   DailyGoal _goal = DailyGoal.sedang;
@@ -30,18 +38,35 @@ class MurojaahProgressController extends ChangeNotifier {
 
   ProgressSnapshot snapshot({DateTime? now}) => ProgressService(
     _entries,
-    verseCount: verseCount,
+    verseCount: _verseCount,
   ).snapshot(now: now ?? DateTime.now(), goal: _goal);
 
   /// Jumlah ayat per surah, disuntikkan dari daftar surah yang sudah dimuat.
   ///
   /// Null = belum diketahui; bonus surah tamat tidak diberikan sampai terisi.
-  int Function(int surahNumber)? verseCount;
+  int Function(int surahNumber)? get verseCount => _verseCount;
+
+  set verseCount(int Function(int surahNumber)? value) {
+    if (identical(value, _verseCount)) return;
+    _verseCount = value;
+    _hafalan = null;
+  }
+
+  int Function(int surahNumber)? _verseCount;
+
+  HafalanMap? _hafalan;
+
+  /// Peta hafalan 114 surah, dihitung sekali per muat/perubahan log.
+  ///
+  /// Widget 114 baris memakai hasil cache ini — bukan memindai log per baris.
+  HafalanMap get hafalan =>
+      _hafalan ??= HafalanMap.compute(_entries, verseCount: _verseCount);
 
   Future<void> load() async {
     _entries = await _store.load();
+    _hafalan = null;
     final prefs = await SharedPreferences.getInstance();
-    _goal = DailyGoal.fromVerses(prefs.getInt(_keyGoal));
+    _goal = DailyGoal.fromVerses(prefs.getInt(keyGoal));
     _loaded = true;
     _notify();
   }
@@ -51,7 +76,26 @@ class MurojaahProgressController extends ChangeNotifier {
     _goal = goal;
     _notify();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyGoal, goal.verses);
+    await prefs.setInt(keyGoal, goal.verses);
+  }
+
+  /// Ganti seluruh log (dipakai impor cadangan).
+  ///
+  /// Pemanggil sudah menggabungkan entri lama + baru, jadi di sini tidak ada
+  /// penggabungan lagi — satu tulis, lalu hitung ulang dari log.
+  Future<void> replaceEntries(List<ActivityEntry> entries) async {
+    await _store.saveAll(entries);
+    _entries = await _store.load();
+    _hafalan = null;
+    _notify();
+  }
+
+  /// Setel target harian tanpa memicu penjadwalan ulang pengingat.
+  Future<void> restoreGoal(DailyGoal goal) async {
+    _goal = goal;
+    _notify();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(keyGoal, goal.verses);
   }
 
   /// Catat satu rentang ayat yang selesai dibaca.
@@ -87,10 +131,12 @@ class MurojaahProgressController extends ChangeNotifier {
     );
     await _store.append(entry);
     _entries = [..._entries, entry];
+    _hafalan = null;
     final after = snapshot(now: now);
     _notify();
-
-    return _diff(before, after);
+    final result = _diff(before, after);
+    onRecorded?.call(result, after.activeToday);
+    return result;
   }
 
   /// Catat sekumpulan ayat (boleh tidak berurutan) sebagai rentang berurutan.
@@ -110,8 +156,9 @@ class MurojaahProgressController extends ChangeNotifier {
         if (e.type == type && e.surahNumber == surahNumber && e.day == today)
           for (var v = e.fromVerse; v <= e.toVerse; v++) v,
     };
-    final fresh = verses.where((v) => v > 0 && !seen.contains(v)).toSet().toList()
-      ..sort();
+    final fresh =
+        verses.where((v) => v > 0 && !seen.contains(v)).toSet().toList()
+          ..sort();
     if (fresh.isEmpty) return RecordResult.none;
 
     var start = fresh.first;
@@ -122,13 +169,15 @@ class MurojaahProgressController extends ChangeNotifier {
         prev = verse;
         continue;
       }
-      result = result + await record(
-        surahNumber: surahNumber,
-        fromVerse: start,
-        toVerse: prev,
-        type: type,
-        at: now,
-      );
+      result =
+          result +
+          await record(
+            surahNumber: surahNumber,
+            fromVerse: start,
+            toVerse: prev,
+            type: type,
+            at: now,
+          );
       start = verse;
       prev = verse;
     }

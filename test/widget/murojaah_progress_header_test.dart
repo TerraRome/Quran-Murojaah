@@ -140,4 +140,18 @@ void main() {
     expect(tester.takeException(), isNull);
     progress.dispose();
   });
+
+  testWidgets('tombol Peta hafalan berikon, berlabel, dan ≥48px', (
+    tester,
+  ) async {
+    final progress = await _controller(const []);
+    await pumpSmall(tester, _app(progress));
+
+    expect(find.text('Peta hafalan'), findsOneWidget);
+    expect(find.byIcon(Icons.map_outlined), findsOneWidget);
+    expect(
+      tester.getSize(find.widgetWithText(TextButton, 'Peta hafalan')).height,
+      greaterThanOrEqualTo(48),
+    );
+  });
 }

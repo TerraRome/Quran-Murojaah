@@ -1,11 +1,9 @@
-import 'package:alice/alice.dart';
-import 'package:alice_dio/alice_dio_adapter.dart';
 import 'package:dio/dio.dart';
-import 'package:get_it/get_it.dart';
 
 import '../models/surah_audio_model.dart';
 import '../models/surah_latin_model.dart';
 import '../models/tafsir_response_model.dart';
+import '../network/dio_error_message.dart';
 
 /// Abstraksi remote data source untuk API equran.id v2.
 abstract class EquranRemoteDataSource {
@@ -29,24 +27,14 @@ class EquranRemoteDataSourceImpl implements EquranRemoteDataSource {
 
   static const String _baseUrl = 'https://equran.id/api/v2';
 
-  static Dio _buildDio() {
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Accept': 'application/json'},
-      ),
-    );
-    // Inject Alice HTTP inspector bila tersedia (debug/dev build).
-    if (GetIt.I.isRegistered<Alice>()) {
-      final alice = GetIt.I<Alice>();
-      final adapter = AliceDioAdapter();
-      alice.addAdapter(adapter);
-      dio.interceptors.add(adapter);
-    }
-    return dio;
-  }
+  static Dio _buildDio() => Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {'Accept': 'application/json'},
+        ),
+      );
 
   @override
   Future<SurahAudioModel> getSurahAudio(int surahNumber) async {
@@ -60,7 +48,7 @@ class EquranRemoteDataSourceImpl implements EquranRemoteDataSource {
       }
       return SurahAudioModel.fromJson(response.data!);
     } on DioException catch (e) {
-      throw EquranApiException(_mapDioError(e));
+      throw EquranApiException(dioErrorMessage(e));
     }
   }
 
@@ -76,7 +64,7 @@ class EquranRemoteDataSourceImpl implements EquranRemoteDataSource {
       }
       return TafsirResponseModel.fromJson(response.data!);
     } on DioException catch (e) {
-      throw EquranApiException(_mapDioError(e));
+      throw EquranApiException(dioErrorMessage(e));
     }
   }
 
@@ -94,22 +82,7 @@ class EquranRemoteDataSourceImpl implements EquranRemoteDataSource {
       final model = SurahLatinModel.fromJson(response.data!);
       return model.verses;
     } on DioException catch (e) {
-      throw EquranApiException(_mapDioError(e));
-    }
-  }
-
-  String _mapDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Koneksi timeout. Periksa koneksi internet Anda.';
-      case DioExceptionType.connectionError:
-        return 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
-      case DioExceptionType.badResponse:
-        final status = e.response?.statusCode;
-        return 'Server mengembalikan error $status.';
-      default:
-        return 'Terjadi kesalahan jaringan: ${e.message}';
+      throw EquranApiException(dioErrorMessage(e));
     }
   }
 }

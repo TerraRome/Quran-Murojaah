@@ -17,59 +17,34 @@ dependencies:
   # Routing
   go_router: ^17.3.0
 
-  # State Management
-  flutter_bloc: ^9.1.1
-  bloc: ^9.2.1
-
-  # Dependency Injection
-  get_it: ^9.2.1
-  injectable: ^3.0.0
-
-  # Code Generation
-  freezed_annotation: ^3.1.0
-  json_annotation: ^4.12.0
-
   # Networking
   dio: ^5.7.0
-  pretty_dio_logger: ^1.4.0
 
   # Local Storage
   shared_preferences: ^2.3.4
-  hive_ce: ^2.15.1
 
   # UI
   flutter_svg: ^2.0.16
   google_fonts: ^8.2.0
-  flutter_animate: ^4.5.2
-  cached_network_image: ^3.4.1
   shimmer: ^3.0.0
 
-  # HTTP Inspector (debug only)
-  alice: ^1.0.0
-  alice_dio: ^1.0.7
-
   # Utilities
-  intl: ^0.20.3
-  logger: ^2.5.0
-  equatable: ^2.0.7
   path_provider: ^2.1.5
-  xml: ^6.5.0
+  # Ekspor cadangan lewat share sheet sistem.
+  share_plus: ^11.1.0
   connectivity_plus: ^7.3.1
-  # TTS
-  flutter_tts: ^4.2.5
 
   # Audio
   just_audio: ^0.9.40
-  audio_session: ^0.1.21
-  record: ^6.2.1
 
-  # ONNX Inference
   # Location (Shalat)
   geolocator: ^13.0.2
   geocoding: ^3.0.0
 
   # Notifications
   flutter_local_notifications: ^19.5.0
+  timezone: ^0.10.1
+  permission_handler: ^12.0.3
   recite_quran: ^1.0.5
 
 dev_dependencies:
@@ -78,14 +53,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
-  # Code Generation
-  build_runner: ^2.4.14
-  freezed: ^3.2.5
-  json_serializable: ^6.9.4
-  injectable_generator: ^3.0.2
-
   # Testing
-  bloc_test: ^10.0.0
   mocktail: ^1.0.4
 
   # Linting

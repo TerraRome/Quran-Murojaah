@@ -89,6 +89,7 @@ void main() {
       recorder: ReciteProgressRecorder(
         progress: withProgress ? progress : null,
         surahNumber: 1,
+        clock: () => now,
       ),
       progress: progress,
     );

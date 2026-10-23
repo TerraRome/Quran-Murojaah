@@ -7,8 +7,8 @@ import '../data/datasources/shalat_local_datasource.dart';
 import '../data/datasources/shalat_remote_datasource.dart';
 import '../domain/entities/jadwal_shalat.dart';
 import '../domain/entities/waktu_shalat.dart';
+import 'adzan_notifications.dart';
 import 'location_service.dart';
-import 'notification_service.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ class ShalatLoaded extends ShalatState {
     required this.countdown,
     required this.notifEnabled,
     this.isOffline = false,
+    this.notifMessage,
   });
 
   final JadwalShalat jadwal;
@@ -47,6 +48,10 @@ class ShalatLoaded extends ShalatState {
   final bool notifEnabled;
   final bool isOffline;
 
+  /// Pesan ramah seputar notifikasi (izin ditolak, alarm tidak eksak, gagal
+  /// dipasang). Null = tidak ada yang perlu dikatakan.
+  final String? notifMessage;
+
   String get lokasi => '${jadwal.kabkota}, ${jadwal.provinsi}';
 
   ShalatLoaded copyWith({
@@ -57,6 +62,8 @@ class ShalatLoaded extends ShalatState {
     Duration? countdown,
     bool? notifEnabled,
     bool? isOffline,
+    String? notifMessage,
+    bool clearNotifMessage = false,
   }) =>
       ShalatLoaded(
         jadwal: jadwal ?? this.jadwal,
@@ -65,6 +72,9 @@ class ShalatLoaded extends ShalatState {
         countdown: countdown ?? this.countdown,
         notifEnabled: notifEnabled ?? this.notifEnabled,
         isOffline: isOffline ?? this.isOffline,
+        notifMessage: clearNotifMessage
+            ? null
+            : notifMessage ?? this.notifMessage,
       );
 }
 
@@ -88,14 +98,19 @@ class ShalatController extends ValueNotifier<ShalatState> {
     required ShalatRemoteDataSource remote,
     required ShalatLocalDataSource local,
     required LocationService locationService,
+    AdzanNotifications? notifications,
   })  : _remote = remote,
         _local = local,
         _locationService = locationService,
+        _notifications =
+            notifications ??
+            const AdzanNotifications(PluginAdzanScheduler()),
         super(const ShalatLoading());
 
   final ShalatRemoteDataSource _remote;
   final ShalatLocalDataSource _local;
   final LocationService _locationService;
+  final AdzanNotifications _notifications;
 
   Timer? _countdownTimer;
 
@@ -245,7 +260,17 @@ class ShalatController extends ValueNotifier<ShalatState> {
       _startCountdown();
 
       if (notifEnabled && today != null) {
-        await NotificationService.scheduleAdzan(today, kabkota);
+        // Segarkan jadwal tanpa memunculkan dialog izin. Kegagalan sudah
+        // diterjemahkan menjadi pesan di dalam AdzanNotifications.
+        final result = await _notifications.enable(
+          times: today.allWaktu,
+          kabkota: kabkota,
+        );
+        if (result.message != null && value is ShalatLoaded) {
+          value = (value as ShalatLoaded).copyWith(
+            notifMessage: result.message,
+          );
+        }
       }
     } on ShalatApiException catch (e) {
       // Fallback ke cache
@@ -294,24 +319,43 @@ class ShalatController extends ValueNotifier<ShalatState> {
 
   // ── Notifikasi ────────────────────────────────────────────────────────────
 
+  /// Nyalakan/matikan pengingat adzan.
+  ///
+  /// Tidak pernah melempar: izin ditolak, alarm tidak eksak, dan kegagalan
+  /// plugin semuanya berakhir sebagai [ShalatLoaded.notifMessage].
   Future<void> toggleNotification() async {
     final state = value;
     if (state is! ShalatLoaded) return;
 
     if (!state.notifEnabled) {
-      final granted = await NotificationService.requestPermission();
-      if (!granted) return;
-      await _local.setNotifEnabled(true);
-      if (state.today != null) {
-        await NotificationService.scheduleAdzan(
-            state.today!, state.jadwal.kabkota);
+      final result = state.today == null
+          ? const AdzanResult(
+              ok: false,
+              message: 'Jadwal hari ini belum tersedia.',
+            )
+          : await _notifications.enable(
+              times: state.today!.allWaktu,
+              kabkota: state.jadwal.kabkota,
+              askPermission: true,
+            );
+      if (!result.ok) {
+        value = state.copyWith(notifMessage: result.message);
+        return;
       }
-    } else {
-      await _local.setNotifEnabled(false);
-      await NotificationService.cancelAll();
+      await _local.setNotifEnabled(true);
+      value = state.copyWith(
+        notifEnabled: true,
+        notifMessage: result.message,
+      );
+      return;
     }
 
-    value = state.copyWith(notifEnabled: !state.notifEnabled);
+    await _local.setNotifEnabled(false);
+    await _notifications.disable();
+    value = state.copyWith(
+      notifEnabled: false,
+      clearNotifMessage: true,
+    );
   }
 
   // ── Countdown timer ───────────────────────────────────────────────────────

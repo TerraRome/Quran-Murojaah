@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../data/network/dio_error_message.dart';
 import '../models/doa_model.dart';
 
 /// Remote data source untuk API equran.id/api/doa.
@@ -48,7 +49,7 @@ class DoaRemoteDataSourceImpl implements DoaRemoteDataSource {
           .map((e) => DoaModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
-      throw DoaApiException(_mapDioError(e));
+      throw DoaApiException(dioErrorMessage(e));
     }
   }
 
@@ -70,22 +71,7 @@ class DoaRemoteDataSourceImpl implements DoaRemoteDataSource {
 
       return DoaModel.fromJson(json);
     } on DioException catch (e) {
-      throw DoaApiException(_mapDioError(e));
-    }
-  }
-
-  String _mapDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Koneksi timeout. Periksa koneksi internet Anda.';
-      case DioExceptionType.connectionError:
-        return 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
-      case DioExceptionType.badResponse:
-        final status = e.response?.statusCode;
-        return 'Server mengembalikan error $status.';
-      default:
-        return 'Terjadi kesalahan jaringan: ${e.message}';
+      throw DoaApiException(dioErrorMessage(e));
     }
   }
 }

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../application/quran_dependencies.dart';
 import '../../data/quran_tokens.dart';
+import '../../murojaah/presentation/widgets/backup_settings_section.dart';
+import '../../murojaah/presentation/widgets/reminder_settings_section.dart';
 import '../widgets/quran_status_bar.dart';
 import '../widgets/quran_theme_scope.dart';
 import '../widgets/quran_top_bar.dart';
 
-/// Halaman Pengaturan ukuran font (Arab & Terjemahan) untuk kenyamanan membaca.
-class FontSizeSettings extends StatelessWidget {
-  const FontSizeSettings({super.key});
+/// Halaman Pengaturan: ukuran font, pengingat harian, dan cadangan data.
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +54,9 @@ class FontSizeSettings extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       _SectionTitle(
-                          dark: dark, title: 'Ukuran Teks Terjemahan'),
+                        dark: dark,
+                        title: 'Ukuran Teks Terjemahan',
+                      ),
                       const SizedBox(height: 8),
                       _FontSizeSlider(
                         dark: dark,
@@ -61,6 +66,7 @@ class FontSizeSettings extends StatelessWidget {
                         onChanged: (v) =>
                             QuranThemeScope.setTranslationFontSize(context, v),
                       ),
+
                       const SizedBox(height: 24),
                       _SectionTitle(dark: dark, title: 'Preview'),
                       const SizedBox(height: 8),
@@ -72,9 +78,8 @@ class FontSizeSettings extends StatelessWidget {
                       const SizedBox(height: 24),
                       Center(
                         child: OutlinedButton.icon(
-                          onPressed: () => QuranThemeScope.resetFontSizes(
-                            context,
-                          ),
+                          onPressed: () =>
+                              QuranThemeScope.resetFontSizes(context),
                           icon: Icon(
                             Icons.restart_alt,
                             color: QuranTokens.brandColor(dark),
@@ -83,9 +88,7 @@ class FontSizeSettings extends StatelessWidget {
                             'Reset',
                             style: QuranTokens.poppins(
                               QuranTokens.tsSurahName,
-                            ).copyWith(
-                              color: QuranTokens.brandColor(dark),
-                            ),
+                            ).copyWith(color: QuranTokens.brandColor(dark)),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
@@ -103,6 +106,17 @@ class FontSizeSettings extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 24),
+                      ReminderSettingsSection(
+                        reminder: QuranDependencies.reminder,
+                        progress: QuranDependencies.murojaahProgress,
+                      ),
+                      const SizedBox(height: 24),
+                      BackupSettingsSection(
+                        progress: QuranDependencies.murojaahProgress,
+                        reminder: QuranDependencies.reminder,
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -125,9 +139,9 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: QuranTokens.poppins(QuranTokens.tsSurahName).copyWith(
-        color: QuranTokens.inkColor(dark),
-      ),
+      style: QuranTokens.poppins(
+        QuranTokens.tsSurahName,
+      ).copyWith(color: QuranTokens.inkColor(dark)),
     );
   }
 }
@@ -164,14 +178,17 @@ class _FontSizeSlider extends StatelessWidget {
                 child: SliderTheme(
                   data: SliderThemeData(
                     activeTrackColor: QuranTokens.brandColor(dark),
-                    inactiveTrackColor:
-                        QuranTokens.secondaryColor(dark).withValues(alpha: 0.3),
+                    inactiveTrackColor: QuranTokens.secondaryColor(
+                      dark,
+                    ).withValues(alpha: 0.3),
                     thumbColor: QuranTokens.brandColor(dark),
-                    overlayColor:
-                        QuranTokens.brandColor(dark).withValues(alpha: 0.1),
+                    overlayColor: QuranTokens.brandColor(
+                      dark,
+                    ).withValues(alpha: 0.1),
                     trackHeight: 4,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 8),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 8,
+                    ),
                   ),
                   child: Slider(
                     value: value.clamp(min, max),
@@ -188,9 +205,9 @@ class _FontSizeSlider extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   '${value.toInt()}',
-                  style: QuranTokens.poppins(QuranTokens.tsSurahName).copyWith(
-                    color: QuranTokens.brandColor(dark),
-                  ),
+                  style: QuranTokens.poppins(
+                    QuranTokens.tsSurahName,
+                  ).copyWith(color: QuranTokens.brandColor(dark)),
                 ),
               ),
             ],
@@ -200,15 +217,15 @@ class _FontSizeSlider extends StatelessWidget {
             children: [
               Text(
                 '${min.toInt()}',
-                style: QuranTokens.poppins(QuranTokens.tsDetailMeta).copyWith(
-                  color: QuranTokens.secondaryColor(dark),
-                ),
+                style: QuranTokens.poppins(
+                  QuranTokens.tsDetailMeta,
+                ).copyWith(color: QuranTokens.secondaryColor(dark)),
               ),
               Text(
                 '${max.toInt()}',
-                style: QuranTokens.poppins(QuranTokens.tsDetailMeta).copyWith(
-                  color: QuranTokens.secondaryColor(dark),
-                ),
+                style: QuranTokens.poppins(
+                  QuranTokens.tsDetailMeta,
+                ).copyWith(color: QuranTokens.secondaryColor(dark)),
               ),
             ],
           ),
@@ -253,8 +270,7 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Dengan nama Allah Yang Maha Pengasih, Maha Penyayang.',
-            style:
-                QuranTokens.poppins(QuranTokens.tsVerseTranslation).copyWith(
+            style: QuranTokens.poppins(QuranTokens.tsVerseTranslation).copyWith(
               fontSize: translationSize,
               color: QuranTokens.secondaryColor(dark),
               height: 1.6,

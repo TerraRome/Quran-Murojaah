@@ -174,6 +174,57 @@ void main() {
       expect(progress.entries, isEmpty);
     });
 
+    test('setiap state non-resumed membatalkan semua timer tanpa kredit', () async {
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.detached,
+      ]) {
+        final r = recorder();
+        r.enter('1:1', surahNumber: 1, verse: 1);
+        r.enter('1:2', surahNumber: 1, verse: 2);
+        r.enter('2:1', surahNumber: 2, verse: 1);
+        clock.advance(const Duration(seconds: 4));
+        r.handleLifecycle(state);
+        await r.flush();
+
+        expect(r.visibleKeys, isEmpty, reason: '$state');
+        expect(r.pendingCount, 0, reason: '$state');
+        expect(progress.entries, isEmpty, reason: '$state');
+        expect(r.isPaused, isTrue, reason: '$state');
+      }
+    });
+
+    test('resume mengulang hitungan untuk semua item', () async {
+      final r = recorder();
+      r.enter('1:1', surahNumber: 1, verse: 1);
+      r.enter('1:2', surahNumber: 1, verse: 2);
+      clock.advance(const Duration(seconds: 4));
+      r.handleLifecycle(AppLifecycleState.paused);
+      clock.advance(const Duration(minutes: 5));
+      r.handleLifecycle(AppLifecycleState.resumed);
+
+      // Widget mendaftar ulang setelah notifikasi resume; hitungan dari nol.
+      r.enter('1:1', surahNumber: 1, verse: 1);
+      r.enter('1:2', surahNumber: 1, verse: 2);
+      clock.advance(const Duration(seconds: 4));
+      r.leave('1:1');
+      r.leave('1:2');
+      await r.flush();
+      expect(progress.entries, isEmpty);
+
+      r.enter('1:1', surahNumber: 1, verse: 1);
+      r.enter('1:2', surahNumber: 1, verse: 2);
+      clock.advance(ReadingLogRecorder.defaultDwell);
+      r.leave('1:1');
+      r.leave('1:2');
+      await r.flush();
+      expect(progress.entries.length, 1);
+      expect(progress.entries.single.fromVerse, 1);
+      expect(progress.entries.single.toVerse, 2);
+    });
+
     test('inactive juga membekukan dwell', () async {
       final r = recorder();
       r.enter('1:1', surahNumber: 1, verse: 1);

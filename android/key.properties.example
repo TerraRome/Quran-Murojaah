@@ -1,0 +1,16 @@
+# Contoh berkas signing Android — JANGAN isi nilai asli di sini.
+#
+# Cara pakai:
+#   1. cp android/key.properties.example android/key.properties
+#   2. Isi empat nilai di bawah (berkas key.properties sudah di-.gitignore)
+#   3. Simpan keystore di luar repo, mis. ~/keystores/quran-release.jks
+#   4. flutter build appbundle --release
+#
+# Tanpa key.properties, build rilis otomatis memakai kunci debug supaya
+# `flutter run --release` tetap bisa dipakai saat pengembangan.
+
+storePassword=<password-keystore>
+keyPassword=<password-key>
+keyAlias=quran-release
+# Path absolut disarankan supaya tidak bergantung direktori kerja Gradle.
+storeFile=/Users/<anda>/keystores/quran-release.jks

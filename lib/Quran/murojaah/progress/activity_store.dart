@@ -23,6 +23,10 @@ abstract class ActivityStore {
   Future<List<ActivityEntry>> load();
 
   Future<void> append(ActivityEntry entry);
+
+  /// Tulis ulang seluruh log. Dipakai impor cadangan — satu tulis, bukan N
+  /// append.
+  Future<void> saveAll(List<ActivityEntry> entries);
 }
 
 class PrefsActivityStore implements ActivityStore {
@@ -43,6 +47,13 @@ class PrefsActivityStore implements ActivityStore {
     final prefs = await SharedPreferences.getInstance();
     final all = await load();
     final next = [...all, entry]..sort((a, b) => a.at.compareTo(b.at));
+    await prefs.setString(key, encodeActivityLog(next));
+  }
+
+  @override
+  Future<void> saveAll(List<ActivityEntry> entries) async {
+    final prefs = await SharedPreferences.getInstance();
+    final next = [...entries]..sort((a, b) => a.at.compareTo(b.at));
     await prefs.setString(key, encodeActivityLog(next));
   }
 }
@@ -68,6 +79,22 @@ String encodeActivityLog(List<ActivityEntry> entries) => jsonEncode({
   'entries': [for (final e in entries) e.toJson()],
 });
 
+/// Entri dari [incoming] yang belum ada di [existing].
+///
+/// Dibandingkan lewat `id`, jadi impor dua kali tidak menggandakan apa pun dan
+/// entri yang sudah ada **tidak** ditimpa — data di perangkat selalu menang.
+List<ActivityEntry> newEntries(
+  List<ActivityEntry> existing,
+  List<ActivityEntry> incoming,
+) {
+  final seen = {for (final e in existing) e.id};
+  final result = <ActivityEntry>[];
+  for (final entry in incoming) {
+    if (seen.add(entry.id)) result.add(entry);
+  }
+  return result;
+}
+
 /// Store di memori — untuk test dan pratinjau.
 class MemoryActivityStore implements ActivityStore {
   MemoryActivityStore([List<ActivityEntry> seed = const []])
@@ -80,4 +107,11 @@ class MemoryActivityStore implements ActivityStore {
 
   @override
   Future<void> append(ActivityEntry entry) async => _entries.add(entry);
+
+  @override
+  Future<void> saveAll(List<ActivityEntry> entries) async {
+    _entries
+      ..clear()
+      ..addAll(entries);
+  }
 }

@@ -11,10 +11,20 @@ import 'recite_session_controller.dart';
 /// tidak tercatat dua kali walau pencatatan dipicu berkali-kali (sesi berhenti,
 /// surah tamat, aplikasi masuk background).
 class ReciteProgressRecorder {
-  ReciteProgressRecorder({required this.progress, required this.surahNumber});
+  ReciteProgressRecorder({
+    required this.progress,
+    required this.surahNumber,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   final MurojaahProgressController? progress;
   final int surahNumber;
+
+  /// Sumber waktu tunggal untuk semua entri sesi ini.
+  ///
+  /// Disuntikkan supaya test tidak bergantung pada jam perangkat (dan tidak
+  /// gagal saat kalender berganti hari).
+  final DateTime Function() _clock;
 
   final Set<int> _recorded = {};
   RecordResult _result = RecordResult.none;
@@ -49,6 +59,7 @@ class ReciteProgressRecorder {
         fromVerse: start + 1,
         toVerse: endExclusive,
         accuracy: accuracy,
+        at: _clock(),
       );
       _result = _result + outcome;
       start = -1;

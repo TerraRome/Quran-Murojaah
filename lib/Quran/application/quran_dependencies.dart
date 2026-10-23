@@ -8,6 +8,8 @@ import '../doa/application/doa_controller.dart';
 import '../doa/data/datasources/doa_local_datasource.dart';
 import '../doa/data/datasources/doa_remote_datasource.dart';
 import '../murojaah/progress/progress_controller.dart';
+import '../murojaah/reminder/local_reminder_scheduler.dart';
+import '../murojaah/reminder/reminder_controller.dart';
 import '../shalat/application/location_service.dart';
 import '../shalat/application/shalat_controller.dart';
 import '../shalat/data/datasources/shalat_local_datasource.dart';
@@ -22,13 +24,16 @@ import 'transliteration_prefetch_service.dart';
 class QuranDependencies {
   QuranDependencies._();
 
-  static final QuranRepository _repository =
-      QuranRepositoryImpl(QuranAssetDataSource());
+  static final QuranRepository _repository = QuranRepositoryImpl(
+    QuranAssetDataSource(),
+  );
 
   static const LastReadStore _lastReadStore = LastReadStore();
 
-  static final QuranController controller =
-      QuranController(_repository, _lastReadStore);
+  static final QuranController controller = QuranController(
+    _repository,
+    _lastReadStore,
+  );
 
   static final DoaController doaController = DoaController(
     remote: DoaRemoteDataSourceImpl(),
@@ -43,12 +48,18 @@ class QuranDependencies {
 
   static final TransliterationPrefetchService transliterationService =
       TransliterationPrefetchService(
-    remote: EquranRemoteDataSourceImpl(),
-    local: TransliterationLocalDataSource(),
-  );
+        remote: EquranRemoteDataSourceImpl(),
+        local: TransliterationLocalDataSource(),
+      );
 
   /// Log aktivitas murojaah + target harian. Dimuat sekali, lalu diperbarui
   /// setiap kali sesi murojaah mencatat bacaan.
   static final MurojaahProgressController murojaahProgress =
       MurojaahProgressController();
+
+  /// Pengingat harian murojaah. Dimuat saat startup, dijadwalkan ulang setiap
+  /// kali progres mencatat bacaan.
+  static final MurojaahReminder reminder = MurojaahReminder(
+    scheduler: LocalReminderScheduler(),
+  );
 }

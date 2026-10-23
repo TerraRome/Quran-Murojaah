@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cadangan otomatis Android 11 ke bawah (fullBackupContent).
+
+  Hanya SharedPreferences yang disertakan, jadi model ASR unduhan, audio
+  murottal, dan cache tidak ikut terangkut: besar dan bisa diunduh ulang.
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+</full-backup-content>

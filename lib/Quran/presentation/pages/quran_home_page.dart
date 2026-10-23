@@ -237,7 +237,7 @@ class _QuranHomePageState extends State<QuranHomePage> {
                   ).copyWith(color: QuranTokens.inkColor(dark)),
                 ),
                 subtitle: Text(
-                  'Ukuran font Arab & terjemahan',
+                  'Tampilan, pengingat & cadangan data',
                   style: QuranTokens.poppins(
                     QuranTokens.tsSurahMeta,
                   ).copyWith(color: QuranTokens.secondaryColor(dark)),

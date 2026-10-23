@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/quran_tokens.dart';
 import '../../progress/progress_controller.dart';
@@ -135,22 +136,50 @@ class MurojaahProgressHeader extends StatelessWidget {
   Widget _goalButton(BuildContext context, bool dark, DailyGoal goal) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: () async {
-          final picked = await showMurojaahGoalPicker(context, current: goal);
-          if (picked != null) await progress.setGoal(picked);
-        },
-        icon: const Icon(Icons.tune_rounded, size: 20),
-        label: const Text('Atur target'),
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          foregroundColor: QuranTokens.inkColor(dark),
-          textStyle: QuranTokens.poppins(QuranTokens.tsLastReadSub),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
-            side: BorderSide(color: QuranTokens.border(dark)),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          _mapButton(context, dark),
+          TextButton.icon(
+            onPressed: () async {
+              final picked = await showMurojaahGoalPicker(
+                context,
+                current: goal,
+              );
+              if (picked != null) await progress.setGoal(picked);
+            },
+            icon: const Icon(Icons.tune_rounded, size: 20),
+            label: const Text('Atur target'),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              foregroundColor: QuranTokens.inkColor(dark),
+              textStyle: QuranTokens.poppins(QuranTokens.tsLastReadSub),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+                side: BorderSide(color: QuranTokens.border(dark)),
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Pintu masuk peta hafalan 114 surah — berikon + berlabel, tinggi ≥48px.
+  Widget _mapButton(BuildContext context, bool dark) {
+    return TextButton.icon(
+      onPressed: () => context.push('/home/quran/murojaah/map'),
+      icon: const Icon(Icons.map_outlined, size: 20),
+      label: const Text('Peta hafalan'),
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        foregroundColor: QuranTokens.inkColor(dark),
+        textStyle: QuranTokens.poppins(QuranTokens.tsLastReadSub),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+          side: BorderSide(color: QuranTokens.border(dark)),
         ),
       ),
     );

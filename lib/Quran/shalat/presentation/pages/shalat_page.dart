@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/quran_tokens.dart';
 import '../../../presentation/widgets/quran_status_bar.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
+import '../../application/location_provider.dart';
 import '../../application/shalat_controller.dart';
 import '../../domain/entities/waktu_shalat.dart';
 import '../widgets/lokasi_selector_sheet.dart';
@@ -72,85 +73,186 @@ class _ShalatPageState extends State<ShalatPage> {
 
   Widget _buildNeedLocation(
       BuildContext context, ShalatNeedLocation state, bool dark) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.location_on_outlined,
-              size: 64, color: QuranTokens.brandColor(dark)),
-          const SizedBox(height: 16),
-          Text(
-            'Izinkan Akses Lokasi',
-            style: QuranTokens.poppins(QuranTokens.tsLastReadTitle).copyWith(
-              color: QuranTokens.inkColor(dark),
-              fontWeight: FontWeight.w700,
-            ),
-            textAlign: TextAlign.center,
+    final issue = state.issue;
+    final copy = issue == null ? null : copyForIssue(issue);
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 24),
+        Icon(Icons.location_on_outlined,
+            size: 64, color: QuranTokens.brandColor(dark)),
+        const SizedBox(height: 16),
+        Text(
+          copy?.title ?? 'Izinkan Akses Lokasi',
+          style: QuranTokens.poppins(QuranTokens.tsLastReadTitle).copyWith(
+            color: QuranTokens.inkColor(dark),
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Untuk menampilkan jadwal shalat yang akurat sesuai wilayahmu.',
-            style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                .copyWith(color: QuranTokens.secondaryColor(dark)),
-            textAlign: TextAlign.center,
-          ),
-          if (state.errorMessage != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                state.errorMessage!,
-                style: QuranTokens.poppins(
-                  const TextStyle(fontSize: 13, color: Colors.orange),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-          const SizedBox(height: 28),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: widget.controller.detectLocation,
-              icon: const Icon(Icons.my_location),
-              label: const Text('Gunakan Lokasi GPS'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: QuranTokens.brandOf(context),
-                foregroundColor: QuranTokens.onBrandOf(context),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          copy?.body ??
+              'Lokasi dipakai sekali untuk mencocokkan kota Anda dengan jadwal '
+                  'shalat. Anda juga bisa memilih kota sendiri.',
+          style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
+              .copyWith(color: QuranTokens.secondaryColor(dark)),
+          textAlign: TextAlign.center,
+        ),
+        if (state.detail != null) ...[
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showLokasiSelector(context, dark),
-              icon: const Icon(Icons.search),
-              label: const Text('Pilih Lokasi Manual'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: QuranTokens.brandColor(dark),
-                side: BorderSide(color: QuranTokens.brandColor(dark)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: QuranTokens.surfaceAlt(dark),
+              borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+              border: Border.all(color: QuranTokens.border(dark)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline,
+                    size: 18, color: QuranTokens.brandColor(dark)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    state.detail!,
+                    style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
+                        .copyWith(color: QuranTokens.secondaryColor(dark)),
+                  ),
                 ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        ..._issueActions(context, copy?.action, dark),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showLokasiSelector(context, dark),
+            icon: const Icon(Icons.search),
+            label: const Text('Pilih Kota Manual'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              foregroundColor: QuranTokens.brandColor(dark),
+              side: BorderSide(color: QuranTokens.brandColor(dark)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Minta lokasi dengan penjelasan lebih dulu.
+  ///
+  /// Alasan dijelaskan di dalam aplikasi sebelum dialog izin sistem muncul,
+  /// supaya pengguna tahu untuk apa lokasi dipakai. Bila izin sudah dipegang,
+  /// tidak ada dialog lagi.
+  Future<void> _requestGps(bool dark) async {
+    if (await widget.controller.hasLocationPermission()) {
+      await widget.controller.detectLocation();
+      return;
+    }
+    if (!mounted) return;
+
+    final lanjut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.location_on_outlined),
+        title: const Text('Kenapa perlu lokasi?'),
+        content: const Text(
+          'Lokasi dipakai sekali untuk mencocokkan kota Anda dengan jadwal '
+          'shalat. Tidak dikirim ke server mana pun, dan Anda tetap bisa '
+          'memilih kota sendiri.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+              _showLokasiSelector(context, dark);
+            },
+            child: const Text('Pilih Kota Manual'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.my_location, size: 18),
+            label: const Text('Lanjutkan'),
           ),
         ],
       ),
     );
+
+    if (lanjut ?? false) await widget.controller.detectLocation();
   }
+
+  /// Tombol aksi sesuai jenis masalah lokasi (ikon + label, tinggi ≥48px).
+  List<Widget> _issueActions(
+      BuildContext context, LocationAction? action, bool dark) {
+    final gps = SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: () => _requestGps(dark),
+        icon: const Icon(Icons.my_location),
+        label: Text(action == LocationAction.retry
+            ? 'Coba Deteksi Lagi'
+            : 'Gunakan Lokasi GPS'),
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          backgroundColor: QuranTokens.brandOf(context),
+          foregroundColor: QuranTokens.onBrandOf(context),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
+          ),
+        ),
+      ),
+    );
+
+    final secondary = switch (action) {
+      LocationAction.openAppSettings => _secondaryButton(
+          dark,
+          icon: Icons.settings_outlined,
+          label: 'Buka Pengaturan Aplikasi',
+          onPressed: widget.controller.openAppSettings,
+        ),
+      LocationAction.openLocationSettings => _secondaryButton(
+          dark,
+          icon: Icons.location_on_outlined,
+          label: 'Buka Pengaturan Lokasi',
+          onPressed: widget.controller.openLocationSettings,
+        ),
+      _ => null,
+    };
+
+    return [gps, if (secondary != null) ...[const SizedBox(height: 12), secondary]];
+  }
+
+  Widget _secondaryButton(
+    bool dark, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) =>
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon),
+          label: Text(label),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            foregroundColor: QuranTokens.brandColor(dark),
+            side: BorderSide(color: QuranTokens.brandColor(dark)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(QuranTokens.radiusButton),
+            ),
+          ),
+        ),
+      );
 
   // ── Loaded ────────────────────────────────────────────────────────────────
 
@@ -159,6 +261,10 @@ class _ShalatPageState extends State<ShalatPage> {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildHeader(context, state, dark)),
+        if (state.locationIssue != null)
+          SliverToBoxAdapter(
+            child: _buildLocationNotice(context, state.locationIssue!, dark),
+          ),
         SliverToBoxAdapter(
             child: _buildCountdownCard(state, dark)),
         SliverToBoxAdapter(
@@ -489,6 +595,98 @@ class _ShalatPageState extends State<ShalatPage> {
             }),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Location notice ───────────────────────────────────────────────────────
+
+  /// Catatan ramah saat deteksi GPS gagal padahal jadwal sudah tampil dari
+  /// lokasi tersimpan. Tidak menghalangi apa pun — hanya informasi + aksi.
+  Widget _buildLocationNotice(
+      BuildContext context, LocationIssue issue, bool dark) {
+    final copy = copyForIssue(issue);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: QuranTokens.surfaceAlt(dark),
+        borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+        border: Border.all(color: QuranTokens.border(dark)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.location_off_outlined,
+                  size: 20, color: QuranTokens.brandColor(dark)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      copy.title,
+                      style: QuranTokens.poppins(QuranTokens.tsLastReadTag)
+                          .copyWith(
+                        color: QuranTokens.inkColor(dark),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Jadwal di bawah memakai lokasi tersimpan '
+                      '(${copy.body})',
+                      style: QuranTokens.poppins(QuranTokens.tsLastReadSub)
+                          .copyWith(color: QuranTokens.textMuted(dark)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _requestGps(dark),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Coba Lagi'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  foregroundColor: QuranTokens.brandColor(dark),
+                  side: BorderSide(color: QuranTokens.brandColor(dark)),
+                ),
+              ),
+              if (copy.action == LocationAction.openAppSettings)
+                OutlinedButton.icon(
+                  onPressed: widget.controller.openAppSettings,
+                  icon: const Icon(Icons.settings_outlined, size: 18),
+                  label: const Text('Pengaturan Aplikasi'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    foregroundColor: QuranTokens.brandColor(dark),
+                    side: BorderSide(color: QuranTokens.brandColor(dark)),
+                  ),
+                ),
+              if (copy.action == LocationAction.openLocationSettings)
+                OutlinedButton.icon(
+                  onPressed: widget.controller.openLocationSettings,
+                  icon: const Icon(Icons.location_on_outlined, size: 18),
+                  label: const Text('Pengaturan Lokasi'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    foregroundColor: QuranTokens.brandColor(dark),
+                    side: BorderSide(color: QuranTokens.brandColor(dark)),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

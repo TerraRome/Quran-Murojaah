@@ -2,6 +2,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Hanya perkiraan: jadwal shalat cukup tingkat kota, tidak perlu presisi.
+         Izin kasar juga tidak memicu dialog "presisi" di Android 12+. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Supaya jadwal pengingat dipulihkan setelah perangkat dinyalakan ulang. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application

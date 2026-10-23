@@ -46,10 +46,10 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
           _loadingProvinsi = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Gagal memuat provinsi: $e';
+          _error = 'Daftar provinsi belum bisa dimuat. Periksa koneksi internet Anda.';
           _loadingProvinsi = false;
         });
       }
@@ -73,10 +73,10 @@ class _LokasiSelectorSheetState extends State<LokasiSelectorSheet> {
           _loadingKabkota = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Gagal memuat kabkota: $e';
+          _error = 'Daftar kota belum bisa dimuat. Periksa koneksi internet Anda.';
           _loadingKabkota = false;
         });
       }

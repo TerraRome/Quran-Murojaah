@@ -5,6 +5,7 @@ import 'package:recite_quran/recite_quran.dart';
 
 import '../../../data/quran_tokens.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
+import 'redaction_geometry.dart';
 
 /// Angka Arab-Indik (0..9 → ٠١٢٣٤٥٦٧٨٩).
 String arabicIndic(int value) {
@@ -150,6 +151,7 @@ class _ReciteMushafState extends State<ReciteMushaf> {
                               boxes:
                                   layout.verseBoxes[widget.activeVerse] ??
                                   const [],
+                              markers: layout.markerBoxes,
                               color: QuranTokens.brandColor(dark),
                             ),
                           ),
@@ -199,6 +201,7 @@ class _MushafDoc {
     this.wordRanges,
     this.verseStarts,
     this.verseEnds,
+    this.markerRanges,
     this.hiddenWords,
     this.style,
   );
@@ -209,6 +212,9 @@ class _MushafDoc {
   final List<(int, int)> wordRanges;
   final List<int> verseStarts;
   final List<int> verseEnds;
+
+  /// Rentang karakter tiap penanda ayat (glyph ۝ + angka).
+  final List<(int, int)> markerRanges;
 
   /// `wordId` kata yang belum cocok — sumber blok redaksi.
   final List<int> hiddenWords;
@@ -229,6 +235,7 @@ class _MushafDoc {
     final ranges = <(int, int)>[];
     final starts = <int>[];
     final ends = <int>[];
+    final markers = <(int, int)>[];
     final hidden = <int>[];
     final green = QuranTokens.correct(dark);
     final red = QuranTokens.wrong(dark);
@@ -284,10 +291,11 @@ class _MushafDoc {
       // Nomor ayat tetap terlihat walau teksnya tersembunyi.
       final marker = ' ۝${arabicIndic(verse.ayah)} ';
       spans.add(TextSpan(text: marker));
+      markers.add((offset, offset + marker.length));
       offset += marker.length;
     }
 
-    return _MushafDoc._(spans, ranges, starts, ends, hidden, base);
+    return _MushafDoc._(spans, ranges, starts, ends, markers, hidden, base);
   }
 
   /// Kotak tiap ayat + kotak kata tersembunyi pada lebar tertentu (cached).
@@ -310,59 +318,47 @@ class _MushafDoc {
       verseBoxes[i] = boxesOf(verseStarts[i], verseEnds[i]);
     }
 
-    final hiddenBoxes = _mergeRuns([
-      for (final id in hiddenWords)
-        for (final rect in boxesOf(wordRanges[id].$1, wordRanges[id].$2))
-          (id: id, rect: rect),
-    ]);
+    final hiddenBoxes = redactionBoxes(
+      words: [
+        for (final id in hiddenWords)
+          for (final rect in boxesOf(wordRanges[id].$1, wordRanges[id].$2))
+            WordBox(id, rect),
+      ],
+      markerBoxes: [
+        for (final range in markerRanges) ...boxesOf(range.$1, range.$2),
+      ],
+    );
+
+    final markerBoxes = [
+      for (final range in markerRanges) ...boxesOf(range.$1, range.$2),
+    ];
 
     _width = maxWidth;
     return _layout = _MushafLayout(
       verseBoxes,
       hiddenBoxes,
+      markerBoxes,
       painter,
       wordRanges,
     );
   }
 
-  /// Gabungkan kotak per-kata menjadi satu batang per baris, tapi hanya untuk
-  /// kata yang berurutan: blok tidak boleh menutupi kata yang sudah terbuka.
-  static List<Rect> _mergeRuns(List<({int id, Rect rect})> boxes) {
-    if (boxes.length < 2) return [for (final b in boxes) b.rect];
-    final sorted = [...boxes]
-      ..sort((a, b) {
-        if ((a.rect.top - b.rect.top).abs() > 2) {
-          return a.rect.top.compareTo(b.rect.top);
-        }
-        return a.rect.left.compareTo(b.rect.left);
-      });
-    final merged = <Rect>[];
-    final ids = <int>[];
-    for (final box in sorted) {
-      if (merged.isNotEmpty &&
-          (box.id - ids.last).abs() == 1 &&
-          box.rect.top < merged.last.bottom - 2) {
-        merged[merged.length - 1] = merged.last.expandToInclude(box.rect);
-        ids[ids.length - 1] = box.id;
-      } else {
-        merged.add(box.rect);
-        ids.add(box.id);
-      }
-    }
-    return merged;
-  }
 }
 
 class _MushafLayout {
   const _MushafLayout(
     this.verseBoxes,
     this.hiddenBoxes,
+    this.markerBoxes,
     this._painter,
     this._wordRanges,
   );
 
   final Map<int, List<Rect>> verseBoxes;
   final List<Rect> hiddenBoxes;
+
+  /// Kotak penanda/nomor ayat — tidak boleh tertutup kotak mana pun.
+  final List<Rect> markerBoxes;
   final TextPainter _painter;
   final List<(int, int)> _wordRanges;
 
@@ -390,8 +386,9 @@ class _MushafLayout {
 /// penuh — kata di bawahnya tetap terlihat samar sebagai bentuk, bukan
 /// tertutup warna. Penanda bentuk (garis), bukan hanya warna.
 ///
-/// Kotak tetap sama persis dengan kotak teks (hanya warna/guratan yang
-/// berubah) supaya overlay dan hit-test tidak bergeser.
+/// Kotak berasal dari `redactionBoxes`: sudah diinset di dalam batas kata dan
+/// dipotong dengan jarak tetap di sekitar penanda ayat, jadi tidak perlu
+/// dilebarkan lagi di sini.
 class _RedactionPainter extends CustomPainter {
   _RedactionPainter({
     required this.boxes,
@@ -412,13 +409,9 @@ class _RedactionPainter extends CustomPainter {
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
     for (final rect in boxes) {
-      final r = Rect.fromLTRB(
-        rect.left - 1,
-        rect.top + 5,
-        rect.right + 1,
-        rect.bottom - 5,
-      );
-      final rr = RRect.fromRectAndRadius(r, const Radius.circular(4));
+      // Kotak sudah diinset oleh `redactionBoxes`: jangan dilebarkan lagi,
+      // supaya stroke tidak keluar dari batas kata.
+      final rr = RRect.fromRectAndRadius(rect, const Radius.circular(4));
       // Isi sangat tipis: cukup memisahkan dari latar, tidak menutupi bentuk
       // kata. Garis putus-putus yang menyatakan "di sini ada kata".
       canvas.drawRRect(rr, fill);
@@ -447,9 +440,16 @@ class _RedactionPainter extends CustomPainter {
 
 /// Latar lembut + batang penanda untuk ayat yang sedang dinilai.
 class _ActiveVersePainter extends CustomPainter {
-  _ActiveVersePainter({required this.boxes, required this.color});
+  _ActiveVersePainter({
+    required this.boxes,
+    required this.markers,
+    required this.color,
+  });
 
   final List<Rect> boxes;
+
+  /// Penanda ayat yang tidak boleh tertutup sorotan.
+  final List<Rect> markers;
   final Color color;
 
   @override
@@ -459,12 +459,21 @@ class _ActiveVersePainter extends CustomPainter {
     for (final b in boxes.skip(1)) {
       r = r.expandToInclude(b);
     }
-    final rect = Rect.fromLTRB(
+    var rect = Rect.fromLTRB(
       r.left - 10,
       r.top - 2,
       r.right + 10,
       r.bottom + 2,
     );
+    // Sorotan tidak boleh menyentuh penanda ayat: potong pada batas penanda.
+    for (final m in markers) {
+      if (m.bottom <= rect.top || m.top >= rect.bottom) continue;
+      if (m.right <= rect.left || m.left >= rect.right) continue;
+      final left = Rect.fromLTRB(rect.left, rect.top, m.left, rect.bottom);
+      final right = Rect.fromLTRB(m.right, rect.top, rect.right, rect.bottom);
+      rect = left.width >= right.width ? left : right;
+    }
+    if (rect.width < 8) return;
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(10)),
       Paint()..color = color.withValues(alpha: 0.07),
@@ -486,5 +495,5 @@ class _ActiveVersePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ActiveVersePainter old) =>
-      old.boxes != boxes || old.color != color;
+      old.boxes != boxes || old.markers != markers || old.color != color;
 }

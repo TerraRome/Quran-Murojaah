@@ -8,6 +8,7 @@ import '../data/datasources/shalat_remote_datasource.dart';
 import '../domain/entities/jadwal_shalat.dart';
 import '../domain/entities/waktu_shalat.dart';
 import 'adzan_notifications.dart';
+import 'location_provider.dart';
 import 'location_service.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -21,8 +22,13 @@ class ShalatLoading extends ShalatState {
 }
 
 class ShalatNeedLocation extends ShalatState {
-  const ShalatNeedLocation({this.errorMessage});
-  final String? errorMessage;
+  const ShalatNeedLocation({this.issue, this.detail});
+
+  /// Sebab lokasi tidak tersedia. Null = belum pernah mencoba mendeteksi.
+  final LocationIssue? issue;
+
+  /// Konteks tambahan yang ramah dibaca (mis. provinsi sudah terdeteksi).
+  final String? detail;
 }
 
 class ShalatLoaded extends ShalatState {
@@ -33,6 +39,7 @@ class ShalatLoaded extends ShalatState {
     required this.countdown,
     required this.notifEnabled,
     this.isOffline = false,
+    this.locationIssue,
     this.notifMessage,
   });
 
@@ -48,6 +55,10 @@ class ShalatLoaded extends ShalatState {
   final bool notifEnabled;
   final bool isOffline;
 
+  /// Sebab deteksi lokasi terakhir gagal, padahal jadwal tetap tampil dari
+  /// lokasi tersimpan. Null = tidak ada masalah.
+  final LocationIssue? locationIssue;
+
   /// Pesan ramah seputar notifikasi (izin ditolak, alarm tidak eksak, gagal
   /// dipasang). Null = tidak ada yang perlu dikatakan.
   final String? notifMessage;
@@ -62,6 +73,8 @@ class ShalatLoaded extends ShalatState {
     Duration? countdown,
     bool? notifEnabled,
     bool? isOffline,
+    LocationIssue? locationIssue,
+    bool clearLocationIssue = false,
     String? notifMessage,
     bool clearNotifMessage = false,
   }) =>
@@ -72,6 +85,9 @@ class ShalatLoaded extends ShalatState {
         countdown: countdown ?? this.countdown,
         notifEnabled: notifEnabled ?? this.notifEnabled,
         isOffline: isOffline ?? this.isOffline,
+        locationIssue: clearLocationIssue
+            ? null
+            : locationIssue ?? this.locationIssue,
         notifMessage: clearNotifMessage
             ? null
             : notifMessage ?? this.notifMessage,
@@ -98,10 +114,14 @@ class ShalatController extends ValueNotifier<ShalatState> {
     required ShalatRemoteDataSource remote,
     required ShalatLocalDataSource local,
     required LocationService locationService,
+    LocationProvider locationProvider = const GeolocatorLocationProvider(),
+    Future<bool> Function()? connectivityCheck,
     AdzanNotifications? notifications,
   })  : _remote = remote,
         _local = local,
         _locationService = locationService,
+        _locationProvider = locationProvider,
+        _connectivityCheck = connectivityCheck,
         _notifications =
             notifications ??
             const AdzanNotifications(PluginAdzanScheduler()),
@@ -110,6 +130,10 @@ class ShalatController extends ValueNotifier<ShalatState> {
   final ShalatRemoteDataSource _remote;
   final ShalatLocalDataSource _local;
   final LocationService _locationService;
+  final LocationProvider _locationProvider;
+
+  /// Sumber status jaringan; bisa diganti di test supaya tidak butuh plugin.
+  final Future<bool> Function()? _connectivityCheck;
   final AdzanNotifications _notifications;
 
   Timer? _countdownTimer;
@@ -136,16 +160,28 @@ class ShalatController extends ValueNotifier<ShalatState> {
   // ── GPS detect ───────────────────────────────────────────────────────────
 
   /// Deteksi lokasi via GPS → reverse geocode → fuzzy match → load jadwal.
+  ///
+  /// Tidak pernah melempar dan tidak pernah mengosongkan jadwal yang sudah
+  /// tampil: bila deteksi gagal padahal lokasi tersimpan ada, halaman tetap
+  /// menampilkan jadwal dan hanya menambahkan catatan [ShalatLoaded.locationIssue].
   Future<void> detectLocation() async {
-    value = const ShalatLoading();
+    final previous = value;
+    final hasJadwal = previous is ShalatLoaded;
+    if (!hasJadwal) value = const ShalatLoading();
+
     try {
-      // Pastikan punya list provinsi dulu
       final provinsiList = await _getProvinsi();
 
-      final position = await _locationService.getCurrentPosition();
+      final outcome = await _locationProvider.currentLocation();
+      if (outcome is LocationUnavailable) {
+        _failLocation(outcome.issue, previous: previous);
+        return;
+      }
+      final fix = outcome as LocationFix;
+
       final placemark = await _locationService.reverseGeocode(
-        position.latitude,
-        position.longitude,
+        fix.latitude,
+        fix.longitude,
       );
 
       final matchedProvinsi = _locationService.matchProvinsi(
@@ -154,8 +190,10 @@ class ShalatController extends ValueNotifier<ShalatState> {
       );
 
       if (matchedProvinsi == null) {
-        value = const ShalatNeedLocation(
-          errorMessage: 'Tidak dapat mendeteksi provinsi. Pilih lokasi manual.',
+        _failLocation(
+          LocationIssue.failed,
+          previous: previous,
+          detail: 'Kota tidak dikenali dari koordinat. Pilih kota manual.',
         );
         return;
       }
@@ -168,21 +206,40 @@ class ShalatController extends ValueNotifier<ShalatState> {
       );
 
       if (matchedKabkota == null) {
-        value = ShalatNeedLocation(
-          errorMessage:
-              'Provinsi terdeteksi: $matchedProvinsi. Pilih kabupaten/kota manual.',
+        _failLocation(
+          LocationIssue.failed,
+          previous: previous,
+          detail: 'Provinsi terdeteksi: $matchedProvinsi. '
+              'Pilih kabupaten/kota manual.',
         );
         return;
       }
 
       await _local.saveLokasi(matchedProvinsi, matchedKabkota);
       await _loadJadwal(provinsi: matchedProvinsi, kabkota: matchedKabkota);
-    } on LocationException catch (e) {
-      value = ShalatNeedLocation(errorMessage: e.message);
-    } catch (e) {
-      value = ShalatNeedLocation(
-        errorMessage: 'Gagal mendeteksi lokasi: $e',
-      );
+    } catch (_) {
+      _failLocation(LocationIssue.failed, previous: previous);
+    }
+  }
+
+  /// Apakah izin lokasi sudah dipegang. Dipakai halaman untuk menampilkan
+  /// penjelasan sebelum dialog izin sistem muncul.
+  Future<bool> hasLocationPermission() => _locationProvider.hasPermission();
+
+  Future<void> openAppSettings() => _locationProvider.openAppSettings();
+
+  Future<void> openLocationSettings() =>
+      _locationProvider.openLocationSettings();
+
+  void _failLocation(
+    LocationIssue issue, {
+    required ShalatState previous,
+    String? detail,
+  }) {
+    if (previous is ShalatLoaded) {
+      value = previous.copyWith(locationIssue: issue);
+    } else {
+      value = ShalatNeedLocation(issue: issue, detail: detail);
     }
   }
 
@@ -299,8 +356,11 @@ class ShalatController extends ValueNotifier<ShalatState> {
       } else {
         value = ShalatError(e.message);
       }
-    } catch (e) {
-      value = ShalatError('Terjadi kesalahan: $e');
+    } catch (_) {
+      value = const ShalatError(
+        'Jadwal shalat belum bisa dimuat. Periksa koneksi internet Anda, '
+        'atau pilih kota lain.',
+      );
     }
   }
 
@@ -413,6 +473,8 @@ class ShalatController extends ValueNotifier<ShalatState> {
   }
 
   Future<bool> _checkConnectivity() async {
+    final override = _connectivityCheck;
+    if (override != null) return override();
     try {
       final results = await Connectivity().checkConnectivity();
       return results.any((r) =>

@@ -1,66 +1,41 @@
 import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
 
-/// Hasil deteksi lokasi GPS.
-class LocationResult {
-  const LocationResult({
-    required this.provinsi,
-    required this.kabkota,
-    required this.isExactMatch,
+/// Nama wilayah hasil reverse geocode, dipisah dari tipe paket `geocoding`
+/// supaya bisa dipalsukan di test tanpa plugin.
+class PlaceNames {
+  const PlaceNames({
+    this.administrativeArea,
+    this.locality,
+    this.subAdministrativeArea,
   });
 
-  final String provinsi;
-  final String kabkota;
+  /// Provinsi (mis. "DKI Jakarta").
+  final String? administrativeArea;
 
-  /// True jika hasil match persis dari API, false jika perlu konfirmasi manual.
-  final bool isExactMatch;
+  /// Kota/kabupaten (mis. "Jakarta Pusat").
+  final String? locality;
+
+  /// Kecamatan; dipakai sebagai cadangan bila [locality] kosong.
+  final String? subAdministrativeArea;
 }
 
-/// Service untuk GPS + reverse geocoding + fuzzy match ke list API.
+/// Reverse geocoding + fuzzy match nama wilayah ke daftar dari API.
+///
+/// Pengambilan koordinat ada di `location_provider.dart`; kelas ini murni
+/// pengolahan nama, jadi mudah dites tanpa plugin.
 class LocationService {
-  /// Minta izin + ambil posisi GPS saat ini.
-  /// Throws [LocationException] jika gagal.
-  Future<Position> getCurrentPosition() async {
-    // Cek apakah GPS aktif
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw const LocationException(
-        'GPS tidak aktif. Aktifkan lokasi di pengaturan perangkat.',
-        LocationExceptionType.serviceDisabled,
-      );
-    }
-
-    // Cek dan minta izin
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw const LocationException(
-          'Izin lokasi ditolak.',
-          LocationExceptionType.permissionDenied,
-        );
-      }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      throw const LocationException(
-        'Izin lokasi ditolak permanen. Aktifkan di pengaturan aplikasi.',
-        LocationExceptionType.permissionDeniedForever,
-      );
-    }
-
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
-  }
-
-  /// Reverse geocode koordinat ke alamat.
-  Future<Placemark?> reverseGeocode(double lat, double lng) async {
+  /// Reverse geocode koordinat ke nama wilayah. Null bila gagal — pemanggil
+  /// menawarkan pilihan kota manual.
+  Future<PlaceNames?> reverseGeocode(double lat, double lng) async {
     try {
       final placemarks = await placemarkFromCoordinates(lat, lng);
-      return placemarks.isNotEmpty ? placemarks.first : null;
+      if (placemarks.isEmpty) return null;
+      final p = placemarks.first;
+      return PlaceNames(
+        administrativeArea: p.administrativeArea,
+        locality: p.locality,
+        subAdministrativeArea: p.subAdministrativeArea,
+      );
     } catch (_) {
       return null;
     }
@@ -132,21 +107,4 @@ class LocationService {
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
       .trim();
-}
-
-/// Exception untuk error lokasi.
-class LocationException implements Exception {
-  const LocationException(this.message, this.type);
-  final String message;
-  final LocationExceptionType type;
-
-  @override
-  String toString() => 'LocationException: $message';
-}
-
-enum LocationExceptionType {
-  serviceDisabled,
-  permissionDenied,
-  permissionDeniedForever,
-  geocodingFailed,
 }

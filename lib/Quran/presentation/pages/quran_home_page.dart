@@ -159,6 +159,8 @@ class _QuranHomePageState extends State<QuranHomePage> {
                               ),
                             ),
                           if (_query.isEmpty)
+                            SliverToBoxAdapter(child: _YasinCard(dark: dark)),
+                          if (_query.isEmpty)
                             SliverToBoxAdapter(
                               child: ListenableBuilder(
                                 listenable: widget.murojaahProgress,
@@ -514,6 +516,60 @@ class _LastReadCard extends StatelessWidget {
   }
 }
 
+/// Pintasan "Surat Yasin" (BC-09) di bawah kartu Last Read: ketuk membuka
+/// surah 36.
+class _YasinCard extends StatelessWidget {
+  const _YasinCard({required this.dark});
+
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      child: Semantics(
+        button: true,
+        label: 'Buka Surat Yasin',
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: () => context.push('/home/quran/surah/36'),
+          borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: QuranTokens.surface(dark),
+              borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.menu_book_rounded,
+                  size: 24,
+                  color: QuranTokens.brandColor(dark),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Surat Yasin',
+                    style: QuranTokens.poppins(
+                      QuranTokens.tsSurahName,
+                    ).copyWith(color: QuranTokens.inkColor(dark)),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: QuranTokens.secondaryColor(dark),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Skeleton shimmer untuk list surah saat loading.
 class _SurahListShimmer extends StatelessWidget {
   const _SurahListShimmer({required this.dark});
@@ -642,7 +698,7 @@ class _BottomTabItem {
   final String label;
 }
 
-/// Bottom navigation icon-only: aktif = brand, nonaktif = abu-abu.
+/// Bottom navigation ikon + label (BC-08): aktif = brand, nonaktif = abu-abu.
 class _QuranBottomNav extends StatelessWidget {
   const _QuranBottomNav({
     required this.tabs,
@@ -659,6 +715,7 @@ class _QuranBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: const ValueKey('quran-bottom-nav'),
       decoration: BoxDecoration(
         color: QuranTokens.background(dark),
         border: Border(
@@ -668,7 +725,7 @@ class _QuranBottomNav extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 44,
+          height: 56,
           child: Row(
             children: [
               for (var i = 0; i < tabs.length; i++)
@@ -676,13 +733,29 @@ class _QuranBottomNav extends StatelessWidget {
                   child: InkWell(
                     onTap: () => onChanged(i),
                     borderRadius: BorderRadius.circular(8),
-                    child: Center(
-                      child: QuranHeaderIcon(
-                        asset: tabs[i].asset,
-                        color: i == selectedIndex
-                            ? QuranTokens.brandColor(dark)
-                            : QuranTokens.secondaryColor(dark),
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        QuranHeaderIcon(
+                          asset: tabs[i].asset,
+                          color: i == selectedIndex
+                              ? QuranTokens.brandColor(dark)
+                              : QuranTokens.secondaryColor(dark),
+                        ),
+                        const SizedBox(height: 2),
+                        // Label selalu tampil, 12sp (tsSurahMeta).
+                        Text(
+                          tabs[i].label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
+                              .copyWith(
+                                color: i == selectedIndex
+                                    ? QuranTokens.brandColor(dark)
+                                    : QuranTokens.secondaryColor(dark),
+                              ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

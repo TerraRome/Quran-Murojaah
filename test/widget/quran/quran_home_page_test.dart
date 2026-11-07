@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:quran/Quran/application/bookmark_controller.dart';
 import 'package:quran/Quran/application/quran_controller.dart';
 import 'package:quran/Quran/doa/application/doa_controller.dart';
@@ -166,6 +167,11 @@ void main() {
   testWidgets('tap tab Murojaah menampilkan daftar surah dan menyembunyikan konten Quran',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
+    // Bottom nav kini 56dp (ikon + label): beri layar lebih tinggi supaya
+    // daftar surah di bawah header Murojaah tetap terbangun.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final controller =
         QuranController(_FakeQuranRepository(_buildSurahs()), const LastReadStore());
 
@@ -206,5 +212,91 @@ void main() {
     await tester.tap(_bottomNavIcon('assets/quran/quran.svg'));
     await tester.pumpAndSettle();
     expect(find.text('Ayo baca Al-Quran hari ini'), findsOneWidget);
+  });
+  Widget homeApp({List<String>? visited, bool withSurahs = true}) {
+    final controller = QuranController(
+      _FakeQuranRepository(withSurahs ? _buildSurahs() : const []),
+      const LastReadStore(),
+    );
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => QuranHomePage(
+            controller: controller,
+            doaController: DoaController(
+              remote: _FakeDoaRemote(),
+              local: DoaLocalDataSource(),
+            ),
+            shalatController: ShalatController(
+              remote: _FakeShalatRemote(),
+              local: ShalatLocalDataSource(),
+              locationService: LocationService(),
+            ),
+            murojaahProgress: MurojaahProgressController(
+              store: MemoryActivityStore(),
+            ),
+            bookmarks: BookmarkController(),
+          ),
+        ),
+        GoRoute(
+          path: '/home/quran/surah/:number',
+          builder: (_, state) {
+            visited?.add(state.uri.toString());
+            return const Scaffold(body: Text('detail'));
+          },
+        ),
+      ],
+    );
+    return QuranThemeScope(child: MaterialApp.router(routerConfig: router));
+  }
+
+  testWidgets('bottom nav: label tampil di semua tab, >=12sp, tanpa overflow di 360dp',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Tanpa daftar surah: SurahCard sendiri sudah overflow di 360dp dengan
+    // data uji (di luar lingkup nav).
+    await tester.pumpWidget(homeApp(withSurahs: false));
+    await tester.pumpAndSettle();
+
+    final nav = find.byKey(const ValueKey('quran-bottom-nav'));
+    for (final label in ['Quran', 'Murojaah', 'Shalat', 'Doa', 'Bookmark']) {
+      final f = find.descendant(of: nav, matching: find.text(label));
+      expect(f, findsOneWidget, reason: label);
+      expect(tester.widget<Text>(f).style!.fontSize, greaterThanOrEqualTo(12));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tab Bookmark: tanpa "Segera hadir", tampil petunjuk', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(homeApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(_bottomNavIcon('assets/quran/bookmark.svg'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Segera hadir'), findsNothing);
+    expect(find.textContaining('Belum ada ayat yang disimpan'), findsOneWidget);
+  });
+
+  testWidgets('kartu Surat Yasin membuka surah 36 (>=48dp, berlabel)',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final visited = <String>[];
+    await tester.pumpWidget(homeApp(visited: visited));
+    await tester.pumpAndSettle();
+
+    final card = find.bySemanticsLabel('Buka Surat Yasin');
+    expect(card, findsOneWidget);
+    expect(tester.getSize(card).height, greaterThanOrEqualTo(48));
+
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+    expect(visited, ['/home/quran/surah/36']);
   });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:go_router/go_router.dart';
 import 'package:quran/Quran/application/bookmark_controller.dart';
 import 'package:quran/Quran/application/quran_controller.dart';
 import 'package:quran/Quran/data/last_read_store.dart';
@@ -213,5 +214,83 @@ void main() {
         });
       }
     });
+  });
+
+  group('Tab Juz (BL-05, BL-06)', () {
+    Future<void> openJuz(WidgetTester tester, {double scale = 1}) async {
+      await _pump(tester, dark: false, scale: scale, page: _home);
+      await tester.tap(find.text('Juz'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Juz Amma pertama, lalu Juz 1', (tester) async {
+      await openJuz(tester);
+      expect(find.text('Juz Amma — surah pendek'), findsOneWidget);
+      expect(find.text('Mulai An-Nas ayat 1'), findsNothing);
+      expect(find.text('Mulai Al-Fatihah ayat 1'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Juz Amma — surah pendek')).dy,
+        lessThan(tester.getTopLeft(find.text('Juz 1')).dy),
+      );
+    });
+
+    testWidgets('NF-01 dan NF-02 di tab Juz', (tester) async {
+      final h = tester.ensureSemantics();
+      await openJuz(tester);
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      h.dispose();
+    });
+
+    testWidgets('NF-03 kontras di tab Juz', (tester) async {
+      final h = tester.ensureSemantics();
+      await openJuz(tester);
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      h.dispose();
+    });
+
+    testWidgets('NF-04 tanpa overflow skala 2.0 di tab Juz', (tester) async {
+      await openJuz(tester, scale: 2);
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final c in [
+      ('Juz Amma — surah pendek', '/home/quran/surah/78?ayat=1'),
+      ('Juz 2', '/home/quran/surah/2?ayat=142'),
+    ]) {
+      testWidgets('ketuk ${c.$1} membuka ${c.$2}', (tester) async {
+        String? opened;
+        final router = GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, _) => QuranThemeScope(
+                child: _home(
+                  QuranController(_FakeRepo(_surahs()), const LastReadStore()),
+                ),
+              ),
+            ),
+            GoRoute(
+              path: '/home/quran/surah/:number',
+              builder: (context, state) {
+                opened = state.uri.toString();
+                return const SizedBox();
+              },
+            ),
+          ],
+        );
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Juz'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(c.$1));
+        await tester.pumpAndSettle();
+        expect(opened, c.$2);
+      });
+    }
   });
 }

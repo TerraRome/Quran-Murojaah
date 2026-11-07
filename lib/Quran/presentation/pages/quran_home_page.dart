@@ -7,6 +7,7 @@ import '../../application/quran_controller.dart';
 import '../../data/quran_tokens.dart';
 import '../../doa/application/doa_controller.dart';
 import '../../doa/presentation/pages/doa_list_page.dart';
+import '../../domain/entities/juz.dart';
 import '../../domain/entities/surah.dart';
 import '../../murojaah/presentation/pages/murojaah_page.dart';
 import '../../murojaah/presentation/widgets/today_activity_summary.dart';
@@ -46,6 +47,7 @@ class _QuranHomePageState extends State<QuranHomePage> {
   bool _searchVisible = false;
   String _query = '';
   int _tabIndex = 0;
+  bool _juzMode = false;
 
   static const _bottomTabs = [
     _BottomTabItem(asset: 'assets/quran/quran.svg', label: 'Quran'),
@@ -123,13 +125,13 @@ class _QuranHomePageState extends State<QuranHomePage> {
                         asset: 'assets/quran/menu_line.svg',
                       ),
                     ),
-                    onSearch: _tabIndex == 0
+                    onSearch: _tabIndex == 0 && !_juzMode
                         ? () => setState(() {
                             _searchVisible = !_searchVisible;
                           })
                         : null,
                   ),
-                  if (_searchVisible && _tabIndex == 0)
+                  if (_searchVisible && _tabIndex == 0 && !_juzMode)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -145,6 +147,12 @@ class _QuranHomePageState extends State<QuranHomePage> {
                         dark: dark,
                       ),
                     ),
+                  if (_tabIndex == 0)
+                    _SurahJuzSwitch(
+                      juzMode: _juzMode,
+                      dark: dark,
+                      onChanged: (juz) => setState(() => _juzMode = juz),
+                    ),
                   Expanded(
                     child: CustomScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -152,16 +160,16 @@ class _QuranHomePageState extends State<QuranHomePage> {
                         if (_tabIndex == 0) ...[
                           SliverToBoxAdapter(child: _Greeting(dark: dark)),
                           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                          if (_query.isEmpty)
+                          if (_query.isEmpty && !_juzMode)
                             SliverToBoxAdapter(
                               child: _LastReadCard(
                                 controller: widget.controller,
                                 dark: dark,
                               ),
                             ),
-                          if (_query.isEmpty)
+                          if (_query.isEmpty && !_juzMode)
                             SliverToBoxAdapter(child: _YasinCard(dark: dark)),
-                          if (_query.isEmpty)
+                          if (_query.isEmpty && !_juzMode)
                             SliverToBoxAdapter(
                               child: ListenableBuilder(
                                 listenable: widget.murojaahProgress,
@@ -358,6 +366,32 @@ class _QuranHomePageState extends State<QuranHomePage> {
             ),
             message: 'Gagal memuat Al-Quran',
             dark: dark,
+          ),
+        ),
+      ];
+    }
+    if (_juzMode) {
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          sliver: SliverList.separated(
+            itemCount: juzDisplayOrder.length,
+            separatorBuilder: (_, _) =>
+                Container(height: 1, color: QuranTokens.listDivider(dark)),
+            itemBuilder: (context, index) {
+              final start = juzDisplayOrder[index];
+              final surah = widget.controller.surahs
+                  .where((s) => s.number == start.surah)
+                  .firstOrNull;
+              return _JuzRow(
+                start: start,
+                surahName: surah?.transliteration ?? 'Surah ${start.surah}',
+                dark: dark,
+                onTap: () => context.push(
+                  '/home/quran/surah/${start.surah}?ayat=${start.ayat}',
+                ),
+              );
+            },
           ),
         ),
       ];
@@ -811,6 +845,122 @@ class _SearchField extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+/// Segmen "Surah" | "Juz" di atas daftar. Tinggi 48dp, berlabel semantik.
+class _SurahJuzSwitch extends StatelessWidget {
+  const _SurahJuzSwitch({
+    required this.juzMode,
+    required this.dark,
+    required this.onChanged,
+  });
+
+  final bool juzMode;
+  final bool dark;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget segment(String label, bool juz) {
+      final selected = juzMode == juz;
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: selected,
+          label: 'Tab $label',
+          excludeSemantics: true,
+          child: InkWell(
+            onTap: () => onChanged(juz),
+            child: Container(
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    width: 2,
+                    color: selected
+                        ? QuranTokens.brandColor(dark)
+                        : QuranTokens.listDivider(dark),
+                  ),
+                ),
+              ),
+              child: Text(
+                label,
+                style: QuranTokens.poppins(QuranTokens.tsSurahName).copyWith(
+                  color: selected
+                      ? QuranTokens.brandColor(dark)
+                      : QuranTokens.secondaryColor(dark),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(children: [segment('Surah', false), segment('Juz', true)]),
+    );
+  }
+}
+
+/// Baris juz: "Juz N" + awalnya ("Mulai Al-Baqarah ayat 142").
+class _JuzRow extends StatelessWidget {
+  const _JuzRow({
+    required this.start,
+    required this.surahName,
+    required this.dark,
+    required this.onTap,
+  });
+
+  final JuzStart start;
+  final String surahName;
+  final bool dark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = start.juz == 30
+        ? 'Juz Amma — surah pendek'
+        : 'Juz ${start.juz}';
+    final subtitle = 'Mulai $surahName ayat ${start.ayat}';
+    return Semantics(
+      button: true,
+      label: start.juz == 30
+          ? 'Juz 30, Juz Amma, surah pendek. $subtitle'
+          : 'Juz ${start.juz}. $subtitle',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: QuranTokens.poppins(
+                    QuranTokens.tsSurahName,
+                  ).copyWith(color: QuranTokens.inkColor(dark)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: QuranTokens.poppins(
+                    QuranTokens.tsSurahMeta,
+                  ).copyWith(color: QuranTokens.secondaryColor(dark)),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

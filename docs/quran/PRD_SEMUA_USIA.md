@@ -88,7 +88,7 @@ Fitur dianggap selesai saat kriteria di bagian 3 terpenuhi. Tabel ini mencatat h
 6. Ubah hanya file yang dibutuhkan oleh requirement. Refactor di luar itu dicatat sebagai temuan, tidak dikerjakan.
 7. Dependensi baru wajib didiskusikan dulu.
 8. Setiap commit dan PR menyebut ID requirement yang dikerjakan, misalnya `BC-05`.
-9. Setiap fitur yang selesai dikerjakan di branch baru dari `main`, lalu di-push. Contoh nama branch: `feat/bc-05-bookmark`, `docs/prd-semua-usia`.
+9. Setiap fitur dikerjakan di branch baru yang dibuat dari `main` terbaru (`git pull` dulu). Setelah selesai, branch di-push, di-merge ke `main`, lalu `main` di-push. Contoh nama branch: `feat/bc-05-bookmark`, `docs/prd-semua-usia`.
 
 ## 3. Functional Requirements
 

@@ -11,24 +11,52 @@ void main() {
         child: MaterialApp(home: const SettingsPage()),
       );
 
-  testWidgets('menampilkan judul Pengaturan dan 2 slider', (tester) async {
+  testWidgets('menampilkan judul Pengaturan, 4 preset, tanpa slider',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
     expect(find.text('Pengaturan'), findsOneWidget);
-    expect(find.text('Ukuran Teks Arab'), findsOneWidget);
-    expect(find.text('Ukuran Teks Terjemahan'), findsOneWidget);
-    expect(find.byType(Slider), findsNWidgets(2));
+    expect(find.byType(Slider), findsNothing);
+    for (final l in ['Kecil', 'Sedang', 'Besar', 'Sangat Besar']) {
+      expect(find.text(l), findsOneWidget);
+    }
+    expect(find.text('Tampilkan latin'), findsOneWidget);
+    expect(find.text('Tampilkan terjemahan'), findsOneWidget);
   });
 
-  testWidgets('nilai default 18 (Arab) dan 16 (Terjemahan)', (tester) async {
+  testWidgets('default: Sedang terpilih; memilih Besar menyimpan ukuran',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    expect(find.text('18'), findsOneWidget);
-    expect(find.text('16'), findsOneWidget);
+    ChoiceChip chip(String l) =>
+        tester.widget(find.widgetWithText(ChoiceChip, l));
+    expect(chip('Sedang').selected, isTrue);
+    expect(tester.getSize(find.widgetWithText(ChoiceChip, 'Besar')).height,
+        greaterThanOrEqualTo(48));
+
+    await tester.tap(find.text('Besar'));
+    await tester.pumpAndSettle();
+    expect(chip('Besar').selected, isTrue);
+    expect(chip('Sedang').selected, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble('quran_font_size_arabic'), 36);
+    expect(prefs.getDouble('quran_font_size_latin'), 20);
+    expect(prefs.getDouble('quran_font_size_translation'), 22);
+  });
+
+  testWidgets('switch latin mati tersimpan', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Tampilkan latin'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('quran_show_latin'), isFalse);
   });
 
   testWidgets('preview menampilkan teks Arab dan terjemahan', (tester) async {
@@ -40,6 +68,7 @@ void main() {
       find.text('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'),
       findsOneWidget,
     );
+    expect(find.text('Bismillāhir-raḥmānir-raḥīm(i).'), findsOneWidget);
     expect(
       find.text(
         'Dengan nama Allah Yang Maha Pengasih, Maha Penyayang.',

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/display_store.dart';
 import '../../data/font_size_store.dart';
 import '../../data/theme_store.dart';
 
@@ -10,18 +11,34 @@ class QuranThemeController extends ChangeNotifier {
   QuranThemeController({
     FontSizeStore fontSizeStore = const FontSizeStore(),
     ThemeStore themeStore = const ThemeStore(),
+    DisplayStore displayStore = const DisplayStore(),
   }) : _store = fontSizeStore,
-       _themeStore = themeStore;
+       _themeStore = themeStore,
+       _displayStore = displayStore;
 
   bool _dark = false;
   double _arabicFontSize = FontSizeStore.defaultArabic;
   double _translationFontSize = FontSizeStore.defaultTranslation;
+  double _latinFontSize = FontSizeStore.defaultLatin;
+  bool _showLatin = true;
+  bool _showTranslation = true;
   final FontSizeStore _store;
   final ThemeStore _themeStore;
+  final DisplayStore _displayStore;
 
   bool get dark => _dark;
   double get arabicFontSize => _arabicFontSize;
   double get translationFontSize => _translationFontSize;
+  double get latinFontSize => _latinFontSize;
+  bool get showLatin => _showLatin;
+  bool get showTranslation => _showTranslation;
+
+  /// Preset yang cocok dengan ukuran sekarang; null bila ukuran kustom.
+  TextSizePreset? get selectedPreset => TextSizePreset.match(
+    _arabicFontSize,
+    _latinFontSize,
+    _translationFontSize,
+  );
 
   /// Balik mode dan simpan pilihannya.
   ///
@@ -38,6 +55,9 @@ class QuranThemeController extends ChangeNotifier {
     _dark = await _themeStore.loadDark();
     _arabicFontSize = await _store.loadArabic();
     _translationFontSize = await _store.loadTranslation();
+    _latinFontSize = await _store.loadLatin();
+    _showLatin = await _displayStore.loadShowLatin();
+    _showTranslation = await _displayStore.loadShowTranslation();
     notifyListeners();
   }
 
@@ -45,7 +65,31 @@ class QuranThemeController extends ChangeNotifier {
   Future<void> loadFontSizes() async {
     _arabicFontSize = await _store.loadArabic();
     _translationFontSize = await _store.loadTranslation();
+    _latinFontSize = await _store.loadLatin();
     notifyListeners();
+  }
+
+  /// Terapkan paket ukuran teks dan simpan ke SharedPreferences.
+  Future<void> setPreset(TextSizePreset p) async {
+    _arabicFontSize = p.arabic;
+    _latinFontSize = p.latin;
+    _translationFontSize = p.translation;
+    notifyListeners();
+    await _store.saveArabic(p.arabic);
+    await _store.saveLatin(p.latin);
+    await _store.saveTranslation(p.translation);
+  }
+
+  Future<void> setShowLatin(bool v) async {
+    _showLatin = v;
+    notifyListeners();
+    await _displayStore.saveShowLatin(v);
+  }
+
+  Future<void> setShowTranslation(bool v) async {
+    _showTranslation = v;
+    notifyListeners();
+    await _displayStore.saveShowTranslation(v);
   }
 
   /// Atur ukuran font Arab dan simpan ke SharedPreferences.
@@ -62,10 +106,11 @@ class QuranThemeController extends ChangeNotifier {
     await _store.saveTranslation(size);
   }
 
-  /// Kembalikan ukuran font ke default (18 Arab, 16 terjemahan).
+  /// Kembalikan ukuran font ke default (preset Sedang).
   Future<void> resetFontSizes() async {
     _arabicFontSize = FontSizeStore.defaultArabic;
     _translationFontSize = FontSizeStore.defaultTranslation;
+    _latinFontSize = FontSizeStore.defaultLatin;
     notifyListeners();
     await _store.resetAll();
   }
@@ -94,6 +139,14 @@ class QuranThemeScope extends StatefulWidget {
 
   static double translationFontSizeOf(BuildContext context) =>
       of(context).translationFontSize;
+
+  static double latinFontSizeOf(BuildContext context) =>
+      of(context).latinFontSize;
+
+  static bool showLatinOf(BuildContext context) => of(context).showLatin;
+
+  static bool showTranslationOf(BuildContext context) =>
+      of(context).showTranslation;
 
   static void setArabicFontSize(BuildContext context, double size) =>
       of(context).setArabicFontSize(size);

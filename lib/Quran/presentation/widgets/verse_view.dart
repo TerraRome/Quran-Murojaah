@@ -47,6 +47,9 @@ class VerseView extends StatelessWidget {
     final dark = QuranThemeScope.darkOf(context);
     final arabicSize = QuranThemeScope.arabicFontSizeOf(context);
     final translationSize = QuranThemeScope.translationFontSizeOf(context);
+    final latinSize = QuranThemeScope.latinFontSizeOf(context);
+    final showLatin = QuranThemeScope.showLatinOf(context);
+    final showTranslation = QuranThemeScope.showTranslationOf(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
@@ -91,16 +94,32 @@ class VerseView extends StatelessWidget {
                         height: 1.9,
                       ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  verse.translation,
-                  style: QuranTokens.poppins(QuranTokens.tsVerseTranslation)
-                      .copyWith(
-                        fontSize: translationSize,
-                        color: QuranTokens.secondaryColor(dark),
-                        height: 1.6,
-                      ),
-                ),
+                // Latin kosong = belum di-prefetch: sembunyikan tanpa pesan.
+                if (showLatin && verse.transliteration.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    verse.transliteration,
+                    style: QuranTokens.poppins(QuranTokens.tsVerseTranslation)
+                        .copyWith(
+                          fontSize: latinSize,
+                          fontStyle: FontStyle.italic,
+                          color: QuranTokens.secondaryColor(dark),
+                          height: 1.6,
+                        ),
+                  ),
+                ],
+                if (showTranslation) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    verse.translation,
+                    style: QuranTokens.poppins(QuranTokens.tsVerseTranslation)
+                        .copyWith(
+                          fontSize: translationSize,
+                          color: QuranTokens.secondaryColor(dark),
+                          height: 1.6,
+                        ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'package:quran/Quran/presentation/widgets/quran_theme_scope.dart';
 import 'package:quran/Quran/presentation/widgets/verse_view.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   const verse = Verse(
@@ -13,13 +14,60 @@ void main() {
     translation: 'Segala puji bagi Allah, Tuhan seluruh alam.',
   );
 
-  Widget wrap({bool showDivider = true}) => QuranThemeScope(
+  const latinVerse = Verse(
+    number: 2,
+    numberInSurah: 2,
+    arabic: 'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ',
+    translation: 'Segala puji bagi Allah, Tuhan seluruh alam.',
+    transliteration: 'Alḥamdu lillāhi rabbil-ʿālamīn(a).',
+  );
+
+  Widget wrap({bool showDivider = true, Verse v = verse}) => QuranThemeScope(
         child: MaterialApp(
           home: Scaffold(
-            body: VerseView(verse: verse, surahNumber: 1, showDivider: showDivider),
+            body: VerseView(verse: v, surahNumber: 1, showDivider: showDivider),
           ),
         ),
       );
+
+  Future<void> pumpWithPrefs(
+    WidgetTester tester,
+    Map<String, Object> prefs,
+  ) async {
+    SharedPreferences.setMockInitialValues(prefs);
+    await tester.pumpWidget(wrap(v: latinVerse));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('latin tampil miring di antara Arab dan terjemahan',
+      (tester) async {
+    await pumpWithPrefs(tester, {});
+    final f = find.text('Alḥamdu lillāhi rabbil-ʿālamīn(a).');
+    expect(f, findsOneWidget);
+    expect(tester.widget<Text>(f).style!.fontStyle, FontStyle.italic);
+    expect(tester.getTopLeft(f).dy,
+        lessThan(tester.getTopLeft(find.text(latinVerse.translation)).dy));
+  });
+
+  testWidgets('latin disembunyikan oleh toggle', (tester) async {
+    await pumpWithPrefs(tester, {'quran_show_latin': false});
+    expect(find.text(latinVerse.transliteration), findsNothing);
+    expect(find.text(latinVerse.translation), findsOneWidget);
+  });
+
+  testWidgets('latin kosong: baris tidak tampil', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w is Text && w.style?.fontStyle == FontStyle.italic),
+        findsNothing);
+  });
+
+  testWidgets('terjemahan disembunyikan oleh toggle', (tester) async {
+    await pumpWithPrefs(tester, {'quran_show_translation': false});
+    expect(find.text(latinVerse.translation), findsNothing);
+    expect(find.text(latinVerse.transliteration), findsOneWidget);
+  });
 
   testWidgets('menampilkan Arab, terjemahan, dan nomor ayat', (tester) async {
     await tester.pumpWidget(wrap());

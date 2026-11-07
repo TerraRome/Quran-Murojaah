@@ -92,6 +92,14 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       datasource: _remoteDatasource,
       localDataSource: _localDataSource,
       qariStore: QariStore.defaults(),
+      surahInfo: (n) {
+        final s = widget.controller.surahs
+            .where((s) => s.number == n)
+            .firstOrNull;
+        return s == null
+            ? null
+            : (name: s.transliteration, totalAyat: s.totalVerses);
+      },
     );
     _downloadController = DownloadController(localDataSource: _localDataSource);
     _scrollController = ScrollController();

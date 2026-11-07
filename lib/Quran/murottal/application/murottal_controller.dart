@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -6,6 +8,12 @@ import '../../data/datasources/equran_remote_datasource.dart';
 import '../../data/models/surah_audio_model.dart';
 import '../../domain/entities/qari.dart';
 import '../../murottal/application/qari_store.dart';
+import 'murottal_prefs_store.dart';
+import 'repeat_sequencer.dart';
+
+/// Cari nama & jumlah ayat surah (untuk lanjut otomatis ke surah berikutnya).
+typedef SurahInfoResolver = ({String name, int totalAyat})? Function(
+    int surahNumber);
 
 /// Mode player murottal.
 enum PlayerMode {
@@ -106,11 +114,77 @@ class MurottalController extends ValueNotifier<MurottalState> {
     required QariStore qariStore,
     AudioLocalDataSource? localDataSource,
     AudioPlayer? player,
+    MurottalPrefsStore prefsStore = const MurottalPrefsStore(),
+    SurahInfoResolver? surahInfo,
   })  : _datasource = datasource,
         _qariStore = qariStore,
         _player = player ?? AudioPlayer(),
+        _prefsStore = prefsStore,
+        _surahInfo = surahInfo,
         super(const MurottalIdle()) {
     _listenToPlayer();
+    prefsLoaded = _loadPrefs();
+  }
+
+  final MurottalPrefsStore _prefsStore;
+  final SurahInfoResolver? _surahInfo;
+  final RepeatSequencer _sequencer = RepeatSequencer();
+
+  /// Selesai saat kecepatan & lanjut otomatis tersimpan sudah dimuat.
+  late final Future<void> prefsLoaded;
+
+  /// Kecepatan putar (BL-01), diingat antar sesi.
+  final ValueNotifier<double> speed = ValueNotifier(1.0);
+
+  /// Pengaturan ulang & jeda (BL-02..BL-04). Tidak disimpan antar sesi.
+  final ValueNotifier<RepeatSettings> repeat =
+      ValueNotifier(const RepeatSettings());
+
+  /// Lanjut otomatis ke surah berikutnya (BL-07), default aktif.
+  bool autoNextSurah = true;
+
+  Timer? _gapTimer;
+
+  /// Langkah yang menunggu jeda selesai; dijalankan saat resume bila di-pause.
+  void Function()? _pending;
+
+  Future<void> _loadPrefs() async {
+    speed.value = await _prefsStore.loadSpeed();
+    autoNextSurah = await _prefsStore.loadAutoNext();
+    await _applySpeed();
+  }
+
+  Future<void> _applySpeed() async {
+    try {
+      await _player.setSpeed(speed.value);
+    } catch (_) {}
+  }
+
+  /// Ubah kecepatan putar dan simpan.
+  Future<void> setSpeed(double v) async {
+    speed.value = v;
+    await _prefsStore.saveSpeed(v);
+    await _applySpeed();
+  }
+
+  /// Ubah pengaturan ulang; hitungan ulangan dimulai dari awal.
+  void setRepeat(RepeatSettings s) {
+    _cancelGap();
+    _sequencer
+      ..settings = s
+      ..reset();
+    repeat.value = s;
+  }
+
+  Future<void> setAutoNextSurah(bool v) async {
+    autoNextSurah = v;
+    await _prefsStore.saveAutoNext(v);
+  }
+
+  void _cancelGap() {
+    _gapTimer?.cancel();
+    _gapTimer = null;
+    _pending = null;
   }
 
   final EquranRemoteDataSource _datasource;
@@ -151,18 +225,66 @@ class MurottalController extends ValueNotifier<MurottalState> {
   void _onCompleted() {
     final current = value;
     if (current is! MurottalPlaying) return;
+    if (_pending != null) return; // sedang jeda antar ulangan
 
-    // Auto-advance ke ayat berikutnya — baik mode per-ayat maupun full-surah
-    if (current.currentAyat < current.totalAyat) {
-      _playAyatInternal(
-        surahNumber: current.surahNumber,
-        surahName: current.surahName,
-        ayatNumber: current.currentAyat + 1,
-        totalAyat: current.totalAyat,
-        isFullSurah: current.isFullSurah,
-      );
-    } else {
-      value = const MurottalIdle();
+    final step = _sequencer.onAyatCompleted(
+      surah: current.surahNumber,
+      ayat: current.currentAyat,
+      totalAyat: current.totalAyat,
+      isFullSurah: current.isFullSurah,
+      autoNextSurah: autoNextSurah,
+    );
+    switch (step) {
+      case StopPlayback():
+        value = const MurottalIdle();
+      case PlaySurah(:final surah):
+        final info = _surahInfo?.call(surah);
+        if (info == null) {
+          value = const MurottalIdle();
+          return;
+        }
+        _playAyatInternal(
+          surahNumber: surah,
+          surahName: info.name,
+          ayatNumber: 1,
+          totalAyat: info.totalAyat,
+          isFullSurah: true,
+        );
+      case PlayAyat(:final ayat, :final gap):
+        void run() {
+          if (ayat == current.currentAyat) {
+            _replay(current);
+          } else {
+            _playAyatInternal(
+              surahNumber: current.surahNumber,
+              surahName: current.surahName,
+              ayatNumber: ayat,
+              totalAyat: current.totalAyat,
+              isFullSurah: current.isFullSurah,
+            );
+          }
+        }
+
+        if (gap == Duration.zero) {
+          run();
+        } else {
+          _pending = run;
+          _gapTimer = Timer(gap, () {
+            _pending = null;
+            run();
+          });
+        }
+    }
+  }
+
+  /// Ulang ayat yang sama tanpa memuat ulang sumber audio.
+  Future<void> _replay(MurottalPlaying current) async {
+    try {
+      await _player.seek(Duration.zero);
+      value = current.copyWith(position: Duration.zero);
+      await _player.play();
+    } catch (e) {
+      value = MurottalError('Gagal memuat audio: $e');
     }
   }
 
@@ -173,10 +295,16 @@ class MurottalController extends ValueNotifier<MurottalState> {
     required String surahName,
     required int totalAyat,
   }) async {
+    _sequencer.reset();
+    final rep = repeat.value;
+    // Mode rentang: mulai dari ayat awal rentang, bukan ayat 1.
+    final first = rep.mode == RepeatKind.range
+        ? rep.rangeStart.clamp(1, totalAyat)
+        : 1;
     await _playAyatInternal(
       surahNumber: surahNumber,
       surahName: surahName,
-      ayatNumber: 1,
+      ayatNumber: first,
       totalAyat: totalAyat,
       isFullSurah: true,
     );
@@ -189,6 +317,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
     required int ayatNumber,
     required int totalAyat,
   }) async {
+    _sequencer.reset();
     await _playAyatInternal(
       surahNumber: surahNumber,
       surahName: surahName,
@@ -206,6 +335,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
     required int totalAyat,
     required bool isFullSurah,
   }) async {
+    _cancelGap();
     final qari = _qariStore.getSelectedQari();
     value = MurottalLoading(surahNumber: surahNumber);
 
@@ -220,6 +350,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
       if (url == null) throw const EquranApiException('URL audio ayat tidak ditemukan');
 
       await _player.setUrl(url);
+      await _applySpeed();
 
       value = MurottalPlaying(
         surahNumber: surahNumber,
@@ -244,6 +375,8 @@ class MurottalController extends ValueNotifier<MurottalState> {
   Future<void> pause() async {
     final current = value;
     if (current is! MurottalPlaying) return;
+    _gapTimer?.cancel();
+    _gapTimer = null;
     await _player.pause();
     value = MurottalPaused(
       surahNumber: current.surahNumber,
@@ -261,6 +394,13 @@ class MurottalController extends ValueNotifier<MurottalState> {
   Future<void> resume() async {
     final current = value;
     if (current is! MurottalPaused) return;
+    final pending = _pending;
+    if (pending != null) {
+      // Jeda ulangan terputus oleh pause: lanjutkan ke langkah berikutnya.
+      _pending = null;
+      pending();
+      return;
+    }
     await _player.play();
     value = MurottalPlaying(
       surahNumber: current.surahNumber,
@@ -276,6 +416,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
 
   /// Stop dan reset ke idle.
   Future<void> stop() async {
+    _cancelGap();
     await _player.stop();
     value = const MurottalIdle();
   }
@@ -331,6 +472,9 @@ class MurottalController extends ValueNotifier<MurottalState> {
 
   @override
   void dispose() {
+    _gapTimer?.cancel();
+    speed.dispose();
+    repeat.dispose();
     _player.dispose();
     super.dispose();
   }

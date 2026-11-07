@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../data/quran_tokens.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
 import '../../application/murottal_controller.dart';
+import '../../application/murottal_prefs_store.dart';
+import '../../application/repeat_sequencer.dart';
+import 'repeat_sheet.dart';
 
 /// Mini player global — bottom sheet persistent saat murottal berjalan.
 ///
@@ -10,6 +13,7 @@ import '../../application/murottal_controller.dart';
 /// - Nama surah + nomor ayat
 /// - Seek bar dengan posisi waktu
 /// - Kontrol: prev ayat, play/pause, next ayat
+/// - Tombol kecepatan (BL-01) dan ulang (BL-02..BL-04)
 /// - Tombol close untuk stop audio
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({
@@ -86,6 +90,22 @@ class _MiniPlayerContent extends StatelessWidget {
       MurottalPlaying(:final duration) => duration,
       MurottalPaused(:final duration) => duration,
       _ => Duration.zero,
+    };
+  }
+
+  int get totalAyat {
+    return switch (state) {
+      MurottalPlaying(:final totalAyat) => totalAyat,
+      MurottalPaused(:final totalAyat) => totalAyat,
+      _ => 0,
+    };
+  }
+
+  int get currentAyat {
+    return switch (state) {
+      MurottalPlaying(:final currentAyat) => currentAyat,
+      MurottalPaused(:final currentAyat) => currentAyat,
+      _ => 0,
     };
   }
 
@@ -213,6 +233,33 @@ class _MiniPlayerContent extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // Kecepatan (BL-01): ketuk untuk ganti 0.5× → 0.75× → 1× → 1.25×
+                  ValueListenableBuilder<double>(
+                    valueListenable: controller.speed,
+                    builder: (context, speed, _) {
+                      final label = speedLabel(speed);
+                      return Semantics(
+                        button: true,
+                        excludeSemantics: true,
+                        label: 'Kecepatan $label',
+                        hint: 'Ketuk untuk mengganti kecepatan',
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                            padding: EdgeInsets.zero,
+                            foregroundColor: QuranTokens.brandColor(dark),
+                          ),
+                          onPressed: () => controller.setSpeed(_nextSpeed(speed)),
+                          child: Text(
+                            label,
+                            style: QuranTokens.poppins(const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
                   // Prev ayat (hanya mode per-ayat)
                   if (!isFullSurah)
                     IconButton(
@@ -250,6 +297,40 @@ class _MiniPlayerContent extends StatelessWidget {
                       icon: Icon(Icons.skip_next_rounded,
                           color: QuranTokens.inkColor(dark), size: 28),
                     ),
+
+                  // Ulang (BL-02..BL-04)
+                  ValueListenableBuilder<RepeatSettings>(
+                    valueListenable: controller.repeat,
+                    builder: (context, rep, _) {
+                      final active = rep.mode != RepeatKind.off;
+                      return Semantics(
+                        button: true,
+                        excludeSemantics: true,
+                        label: active ? 'Ulang ayat, aktif' : 'Ulang ayat',
+                        child: IconButton(
+                          constraints: const BoxConstraints(
+                              minWidth: 48, minHeight: 48),
+                          onPressed: totalAyat == 0
+                              ? null
+                              : () => showRepeatSheet(
+                                    context,
+                                    controller: controller,
+                                    totalAyat: totalAyat,
+                                    currentAyat: currentAyat,
+                                  ),
+                          icon: Icon(
+                            rep.mode == RepeatKind.ayat
+                                ? Icons.repeat_one_rounded
+                                : Icons.repeat_rounded,
+                            color: active
+                                ? QuranTokens.brandColor(dark)
+                                : QuranTokens.inkColor(dark),
+                            size: 26,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ],
@@ -259,9 +340,18 @@ class _MiniPlayerContent extends StatelessWidget {
     );
   }
 
+  static double _nextSpeed(double current) {
+    const all = MurottalPrefsStore.speeds;
+    final i = all.indexOf(current);
+    return all[(i + 1) % all.length];
+  }
+
   String _formatDuration(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 }
+
+/// Label kecepatan, mis. `1×`, `0.75×`.
+String speedLabel(double v) => v == v.roundToDouble() ? '${v.toInt()}×' : '$v×';

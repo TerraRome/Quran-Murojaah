@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/datasources/audio_local_datasource.dart';
 import '../../../data/quran_tokens.dart';
 import '../../../domain/entities/qari.dart';
+import '../../../murottal/application/murottal_prefs_store.dart';
 import '../../../murottal/application/qari_store.dart';
 import '../../../presentation/widgets/quran_status_bar.dart';
 import '../../../presentation/widgets/quran_theme_scope.dart';
@@ -23,6 +24,9 @@ class MurottalSettingsPage extends StatefulWidget {
 class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
   final AudioLocalDataSource _local = AudioLocalDataSourceImpl();
 
+  final MurottalPrefsStore _prefsStore = const MurottalPrefsStore();
+  bool _autoNext = true;
+
   QariStore? _qariStore;
   Qari _selectedQari = Qari.defaultQari;
   List<LocalAudioInfo> _downloads = [];
@@ -33,6 +37,9 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
   void initState() {
     super.initState();
     _initPrefs();
+    _prefsStore.loadAutoNext().then((v) {
+      if (mounted) setState(() => _autoNext = v);
+    });
     _loadDownloads();
   }
 
@@ -206,6 +213,35 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
                         isSelected: _selectedQari == qari,
                         dark: dark,
                         onTap: () => _selectQari(qari),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // --- Pemutaran (BL-07) ---
+                    _SectionTitle(dark: dark, title: 'Pemutaran'),
+                    const SizedBox(height: 8),
+                    MergeSemantics(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Lanjut otomatis ke surah berikutnya',
+                                style: QuranTokens.poppins(
+                                        const TextStyle(fontSize: 14))
+                                    .copyWith(color: QuranTokens.inkColor(dark)),
+                              ),
+                            ),
+                            Switch(
+                              value: _autoNext,
+                              onChanged: (v) {
+                                setState(() => _autoNext = v);
+                                _prefsStore.saveAutoNext(v);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 28),

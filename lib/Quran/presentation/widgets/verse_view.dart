@@ -19,6 +19,7 @@ class VerseView extends StatelessWidget {
     this.onPlayTap,
     this.onTafsirTap,
     this.onBookmarkTap,
+    this.onShareTap,
     this.isBookmarked = false,
     this.isPlaying = false,
     this.isHighlighted = false,
@@ -36,6 +37,9 @@ class VerseView extends StatelessWidget {
 
   /// Callback saat ikon tafsir (ℹ) di-tap.
   final VoidCallback? onTafsirTap;
+
+  /// Callback saat ikon share di-tap (BC-07).
+  final VoidCallback? onShareTap;
 
   /// Callback saat ikon simpan di-tap (toggle bookmark, BC-05).
   final VoidCallback? onBookmarkTap;
@@ -84,6 +88,7 @@ class VerseView extends StatelessWidget {
             onPlayTap: onPlayTap,
             onTafsirTap: onTafsirTap,
             onBookmarkTap: onBookmarkTap,
+            onShareTap: onShareTap,
             isBookmarked: isBookmarked,
             isPlaying: isPlaying,
           ),
@@ -155,6 +160,7 @@ class _VerseHeader extends StatelessWidget {
     this.onPlayTap,
     this.onTafsirTap,
     this.onBookmarkTap,
+    this.onShareTap,
     this.isBookmarked = false,
     this.isPlaying = false,
   });
@@ -163,6 +169,7 @@ class _VerseHeader extends StatelessWidget {
   final VoidCallback? onPlayTap;
   final VoidCallback? onTafsirTap;
   final VoidCallback? onBookmarkTap;
+  final VoidCallback? onShareTap;
   final bool isBookmarked;
   final bool isPlaying;
 
@@ -181,9 +188,10 @@ class _VerseHeader extends StatelessWidget {
           _VerseNumberBadge(number: number),
           const Spacer(),
 
-          // Share (belum ada aksi; dihubungkan di fitur berikutnya)
+          // Share
           _HeaderAction(
             label: 'Bagikan ayat $number',
+            onTap: onShareTap,
             child: QuranHeaderIcon(
               asset: 'assets/quran/share.svg',
               color: iconColor,

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/bookmark_controller.dart';
 import '../../application/quran_controller.dart';
+import '../../application/verse_share.dart';
 import '../../data/datasources/audio_local_datasource.dart';
 import '../../data/datasources/equran_remote_datasource.dart';
 import '../../data/quran_tokens.dart';
 import '../../domain/entities/qari.dart';
 import '../../domain/entities/surah.dart';
+import '../../domain/entities/verse.dart';
 import '../../domain/failures/quran_failure.dart';
 import '../../murojaah/progress/activity_entry.dart';
 import '../../murojaah/progress/progress_controller.dart';
@@ -239,6 +242,23 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       totalAyat: surah.totalVerses,
       readingProgress: widget.readingProgress,
     );
+  }
+
+  /// Bagikan ayat sebagai teks lewat lembar berbagi sistem (BC-07).
+  Future<void> _shareVerse(Verse verse) async {
+    final surah = _surah;
+    if (surah == null) return;
+    final text = buildVerseShareText(
+      surahName: surah.transliteration,
+      ayat: verse.numberInSurah,
+      arabic: verse.displayArabic(surah.number),
+      transliteration: verse.transliteration,
+      translation: verse.translation,
+      showLatin: QuranThemeScope.showLatinOf(context),
+    );
+    try {
+      await SharePlus.instance.share(ShareParams(text: text));
+    } catch (_) {}
   }
 
   /// Toggle simpan ayat; saat menyimpan, tawarkan "Batal" (BC-05).
@@ -547,6 +567,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
                               _openTafsir(verse.numberInSurah),
                           onBookmarkTap: () =>
                               _toggleBookmark(verse.numberInSurah),
+                          onShareTap: () => _shareVerse(verse),
                             ),
                           ),
                         ),

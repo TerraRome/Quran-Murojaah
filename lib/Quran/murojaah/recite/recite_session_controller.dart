@@ -9,14 +9,14 @@ import 'asr_snapshot.dart';
 import 'heard_word.dart';
 import 'recite_session_engine.dart';
 
+/// Hasil penilaian satu ayat.
+enum VerseOutcome { pending, correct, wrong }
+
 /// State dan keputusan satu sesi latihan murojaah — tanpa widget apa pun.
 ///
 /// Pemindahan murni dari `_ReciteMurojaahPageState`: urutan pemanggilan matcher,
 /// kapan snapshot diambil, dan kapan kursor tracker mundur harus tetap identik.
 /// `heard_word.dart` tidak disentuh.
-/// Hasil penilaian satu ayat.
-enum VerseOutcome { pending, correct, wrong }
-
 class ReciteSessionController extends ChangeNotifier {
   ReciteSessionController({required this.engine});
 

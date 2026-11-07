@@ -110,6 +110,25 @@ void main() {
       expect(p.speeds.last, 0.5);
     });
 
+    test('playOnce: selesai true tanpa lanjut otomatis; stop -> false', () async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      final f = c.playOnce(
+          surahNumber: 1, surahName: 'S1', ayatNumber: 1, totalAyat: 2);
+      await pumpEventQueue();
+      await complete(p);
+      expect(await f, isTrue);
+      expect(c.value, isA<MurottalIdle>());
+      expect(p.urls, ['s1-a1']);
+
+      final g = c.playOnce(
+          surahNumber: 1, surahName: 'S1', ayatNumber: 2, totalAyat: 2);
+      await pumpEventQueue();
+      await c.stop();
+      expect(await g, isFalse);
+    });
+
     test('ulang satu ayat 3×: sumber tidak dimuat ulang, lalu idle', () async {
       final p = _FakePlayer();
       final c = make(p);

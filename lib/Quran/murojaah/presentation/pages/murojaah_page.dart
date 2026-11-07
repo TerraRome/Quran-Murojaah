@@ -85,6 +85,7 @@ class _MurojaahPageState extends State<MurojaahPage> {
                   builder: (context, _) => _continueCard(context, state.surahs),
                 ),
               ),
+              SliverToBoxAdapter(child: _tirukanTile(context, state.surahs, dark)),
               ..._buildList(state, dark),
             ],
           ),
@@ -110,6 +111,35 @@ class _MurojaahPageState extends State<MurojaahPage> {
       surahName: surah.transliteration,
       hasHistory: last != null,
       onTap: () => context.push('/home/quran/murojaah/surah/$surahNumber'),
+    );
+  }
+
+  /// Pintu masuk "Dengar lalu Tirukan" (BL-08) untuk surah terakhir dilatih.
+  Widget _tirukanTile(BuildContext context, List<Surah> surahs, bool dark) {
+    final last = ProgressService(
+      widget.progress.entries,
+    ).lastEntryOf(ActivityType.murojaah);
+    final surahNumber = last?.surahNumber ?? 1;
+    final name = surahs.where((s) => s.number == surahNumber).firstOrNull
+        ?.transliteration;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+      child: OutlinedButton.icon(
+        onPressed: () =>
+            context.push('/home/quran/murojaah/tirukan/$surahNumber'),
+        icon: const Icon(Icons.hearing),
+        label: Text(
+          name == null
+              ? 'Dengar lalu Tirukan'
+              : 'Dengar lalu Tirukan · $name',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          foregroundColor: QuranTokens.brandColor(dark),
+        ),
+      ),
     );
   }
 

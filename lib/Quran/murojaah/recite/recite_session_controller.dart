@@ -14,6 +14,9 @@ import 'recite_session_engine.dart';
 /// Pemindahan murni dari `_ReciteMurojaahPageState`: urutan pemanggilan matcher,
 /// kapan snapshot diambil, dan kapan kursor tracker mundur harus tetap identik.
 /// `heard_word.dart` tidak disentuh.
+/// Hasil penilaian satu ayat.
+enum VerseOutcome { pending, correct, wrong }
+
 class ReciteSessionController extends ChangeNotifier {
   ReciteSessionController({required this.engine});
 
@@ -102,6 +105,40 @@ class ReciteSessionController extends ChangeNotifier {
       if (!_matched.contains(id)) return false;
     }
     return true;
+  }
+
+  /// Hasil percobaan ayat ke-[verse] (0-based): benar bila semua kata hijau,
+  /// salah bila semua kata sudah dinilai tetapi ada yang merah, selain itu
+  /// masih berjalan. Dipakai mode Dengar lalu Tirukan (BL-08).
+  VerseOutcome verseOutcome(int verse) {
+    if (verse < 0 || verse + 1 >= _wordStarts.length) return VerseOutcome.pending;
+    final start = _wordStarts[verse];
+    final end = _wordStarts[verse + 1];
+    if (end <= start) return VerseOutcome.pending;
+    var missed = false;
+    for (var id = start; id < end; id++) {
+      if (_missed.contains(id)) {
+        missed = true;
+      } else if (!_matched.contains(id)) {
+        return VerseOutcome.pending;
+      }
+    }
+    return missed ? VerseOutcome.wrong : VerseOutcome.correct;
+  }
+
+  /// Mulai percobaan baru untuk ayat ke-[verse]: buang penilaian lama ayat itu
+  /// dan taruh kursor pelacakan di kata pertamanya. Tidak menyalakan mikrofon.
+  void startVerseAttempt(int verse) {
+    if (verse < 0 || verse + 1 >= _wordStarts.length) return;
+    final start = _wordStarts[verse];
+    final end = _wordStarts[verse + 1];
+    _activeVerse = verse;
+    engine.rewindTo(start);
+    _missed.removeWhere((id) => id >= start && id < end);
+    _matched.removeWhere((id) => id >= start && id < end);
+    _asr.rewind(forgetWords: Iterable.generate(end - start, (i) => start + i));
+    _resetAsr();
+    notifyListeners();
   }
 
   /// Teks kata global [wordId] dari ayat pemiliknya.

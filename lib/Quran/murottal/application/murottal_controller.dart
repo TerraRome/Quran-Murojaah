@@ -145,6 +145,15 @@ class MurottalController extends ValueNotifier<MurottalState> {
 
   Timer? _gapTimer;
 
+  /// Menunggu satu ayat selesai diputar ([playOnce], BL-08).
+  Completer<bool>? _once;
+
+  void _finishOnce(bool completed) {
+    final c = _once;
+    _once = null;
+    if (c != null && !c.isCompleted) c.complete(completed);
+  }
+
   /// Langkah yang menunggu jeda selesai; dijalankan saat resume bila di-pause.
   void Function()? _pending;
 
@@ -226,6 +235,12 @@ class MurottalController extends ValueNotifier<MurottalState> {
     final current = value;
     if (current is! MurottalPlaying) return;
     if (_pending != null) return; // sedang jeda antar ulangan
+    if (_once != null) {
+      // Putar-sekali: tidak ada lanjut otomatis, pemanggil yang menentukan.
+      value = const MurottalIdle();
+      _finishOnce(true);
+      return;
+    }
 
     final step = _sequencer.onAyatCompleted(
       surah: current.surahNumber,
@@ -327,6 +342,31 @@ class MurottalController extends ValueNotifier<MurottalState> {
     );
   }
 
+  /// Putar satu ayat tanpa ulang/lanjut otomatis (BL-08). Selesai dengan true
+  /// saat audio habis; false bila gagal dimuat atau dihentikan ([stop]).
+  Future<bool> playOnce({
+    required int surahNumber,
+    required String surahName,
+    required int ayatNumber,
+    required int totalAyat,
+  }) async {
+    _finishOnce(false);
+    _sequencer.reset();
+    final done = _once = Completer<bool>();
+    unawaited(
+      _playAyatInternal(
+        surahNumber: surahNumber,
+        surahName: surahName,
+        ayatNumber: ayatNumber,
+        totalAyat: totalAyat,
+        isFullSurah: false,
+      ).then((_) {
+        if (value is MurottalError) _finishOnce(false);
+      }),
+    );
+    return done.future;
+  }
+
   /// Internal: muat & putar satu ayat dengan flag isFullSurah.
   Future<void> _playAyatInternal({
     required int surahNumber,
@@ -417,6 +457,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   /// Stop dan reset ke idle.
   Future<void> stop() async {
     _cancelGap();
+    _finishOnce(false);
     await _player.stop();
     value = const MurottalIdle();
   }
@@ -473,6 +514,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   @override
   void dispose() {
     _gapTimer?.cancel();
+    _finishOnce(false);
     speed.dispose();
     repeat.dispose();
     _player.dispose();

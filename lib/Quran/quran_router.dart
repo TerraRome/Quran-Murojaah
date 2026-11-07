@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'application/quran_dependencies.dart';
 import 'murojaah/presentation/pages/hafalan_map_page.dart';
 import 'murojaah/recite/recite_murojaah_page.dart';
+import 'murojaah/tirukan/dengar_tirukan_page.dart';
 import 'murottal/presentation/pages/murottal_settings_page.dart';
 import 'presentation/pages/quran_home_page.dart';
 import 'presentation/pages/quran_splash_page.dart';
@@ -23,6 +24,7 @@ import 'presentation/widgets/quran_theme_scope.dart';
 ///   /home/quran/murottal-settings            → MurottalSettingsPage
 ///   /home/quran/murojaah/map                 → HafalanMapPage
 ///   /home/quran/murojaah/surah/:number       → ReciteMurojaahPage
+///   /home/quran/murojaah/tirukan/:number     → DengarTirukanPage (BL-08)
 final GoRouter quranRouter = GoRouter(
   initialLocation: '/',
   routes: [
@@ -82,6 +84,13 @@ final GoRouter quranRouter = GoRouter(
               progress: QuranDependencies.murojaahProgress,
             );
           },
+        ),
+        GoRoute(
+          path: '/home/quran/murojaah/tirukan/:number',
+          builder: (context, state) => DengarTirukanPage(
+            surahNumber: int.parse(state.pathParameters['number']!),
+            controller: QuranDependencies.controller,
+          ),
         ),
       ],
     ),

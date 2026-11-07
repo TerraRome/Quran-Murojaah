@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran/Quran/murojaah/recite/recite_session_controller.dart';
 import 'package:quran/Quran/murojaah/recite/recite_session_engine.dart';
+import 'package:quran/Quran/murojaah/tirukan/dengar_tirukan_flow.dart';
 import 'package:recite_quran/recite_quran.dart';
 
 /// Engine palsu: meniru bentuk data `ReciteMurojaahService` tanpa mesin ASR.
@@ -261,5 +262,44 @@ void main() {
 
     // Tidak ada perubahan state dan tidak ada exception dari timer.
     expect(s.session.matched, {0});
+  });
+
+  testWidgets('BL-08: verseOutcome pending -> correct / wrong', (tester) async {
+    final s = _setup();
+    expect(s.session.verseOutcome(0), VerseOutcome.pending);
+    s.engine.emitWord(_green(0, 'اا'));
+    await tester.pump();
+    expect(s.session.verseOutcome(0), VerseOutcome.pending);
+    s.engine.emitWord(_green(1, 'بب'));
+    await tester.pump();
+    expect(s.session.verseOutcome(0), VerseOutcome.correct);
+
+    s.engine.emitWord(_green(2, 'جج'));
+    s.engine.emitWord(_red(3));
+    await tester.pump();
+    expect(s.session.verseOutcome(1), VerseOutcome.wrong);
+
+    // Percobaan baru membuang penilaian lama dan memundurkan kursor.
+    s.session.startVerseAttempt(1);
+    expect(s.session.verseOutcome(1), VerseOutcome.pending);
+    expect(s.engine.rewindCalls.last, 2);
+    s.session.dispose();
+  });
+
+  testWidgets('BL-08: ReciteAyatRecognizer menunggu hasil ayat', (tester) async {
+    final s = _setup();
+    final rec = ReciteAyatRecognizer(session: s.session, engine: s.engine);
+    bool? result;
+    unawaited(rec.listen(1).then((v) => result = v));
+    await tester.pump();
+    expect(s.engine.startCalls, 1);
+    expect(result, isNull);
+    s.engine.emitWord(_green(0, 'اا'));
+    s.engine.emitWord(_green(1, 'بب'));
+    await tester.pump();
+    await tester.pump();
+    expect(result, isTrue);
+    expect(s.engine.stopCalls, 1);
+    s.session.dispose();
   });
 }

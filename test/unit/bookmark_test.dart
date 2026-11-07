@@ -71,6 +71,21 @@ void main() {
       ]);
     });
 
+    test('simpan sebelum load selesai tidak menimpa daftar tersimpan', () async {
+      final first = BookmarkController();
+      await first.toggle(1, 1, at: DateTime(2026, 1, 1));
+
+      final c = BookmarkController();
+      final loading = c.load(); // sengaja tidak ditunggu
+      await c.toggle(2, 255, at: DateTime(2026, 1, 2));
+      await loading;
+
+      final reloaded = BookmarkController();
+      await reloaded.load();
+      expect(reloaded.isSaved(1, 1), isTrue);
+      expect(reloaded.isSaved(2, 255), isTrue);
+    });
+
     test('bertahan setelah dimuat ulang', () async {
       final c = BookmarkController();
       await c.toggle(2, 255, at: DateTime(2026, 1, 2));

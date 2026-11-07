@@ -117,6 +117,7 @@ class _QuranHomePageState extends State<QuranHomePage> {
                     titleColor: QuranTokens.brandColor(dark),
                     leading: IconButton(
                       onPressed: () => _showMenu(context, dark),
+                      tooltip: 'Menu',
                       padding: EdgeInsets.zero,
                       icon: const QuranHeaderIcon(
                         asset: 'assets/quran/menu_line.svg',
@@ -124,8 +125,8 @@ class _QuranHomePageState extends State<QuranHomePage> {
                     ),
                     onSearch: _tabIndex == 0
                         ? () => setState(() {
-                              _searchVisible = !_searchVisible;
-                            })
+                            _searchVisible = !_searchVisible;
+                          })
                         : null,
                   ),
                   if (_searchVisible && _tabIndex == 0)
@@ -483,11 +484,13 @@ class _LastReadCard extends StatelessWidget {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          'Last Read',
-                          style: QuranTokens.poppins(
-                            QuranTokens.tsLastReadTag,
-                          ).copyWith(color: Colors.white),
+                        Flexible(
+                          child: Text(
+                            'Last Read',
+                            style: QuranTokens.poppins(
+                              QuranTokens.tsLastReadTag,
+                            ).copyWith(color: Colors.white),
+                          ),
                         ),
                       ],
                     ),
@@ -718,48 +721,50 @@ class _QuranBottomNav extends StatelessWidget {
       key: const ValueKey('quran-bottom-nav'),
       decoration: BoxDecoration(
         color: QuranTokens.background(dark),
-        border: Border(
-          top: BorderSide(color: QuranTokens.divider(dark)),
-        ),
+        border: Border(top: BorderSide(color: QuranTokens.divider(dark))),
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              for (var i = 0; i < tabs.length; i++)
-                Expanded(
-                  child: InkWell(
-                    onTap: () => onChanged(i),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        QuranHeaderIcon(
-                          asset: tabs[i].asset,
-                          color: i == selectedIndex
-                              ? QuranTokens.brandColor(dark)
-                              : QuranTokens.secondaryColor(dark),
-                        ),
-                        const SizedBox(height: 2),
-                        // Label selalu tampil, 12sp (tsSurahMeta).
-                        Text(
-                          tabs[i].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                              .copyWith(
-                                color: i == selectedIndex
-                                    ? QuranTokens.brandColor(dark)
-                                    : QuranTokens.secondaryColor(dark),
-                              ),
-                        ),
-                      ],
+        // Tinggi minimal 56dp; tumbuh mengikuti skala teks sistem (NF-04).
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < tabs.length; i++)
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => onChanged(i),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          QuranHeaderIcon(
+                            asset: tabs[i].asset,
+                            color: i == selectedIndex
+                                ? QuranTokens.brandColor(dark)
+                                : QuranTokens.secondaryColor(dark),
+                          ),
+                          const SizedBox(height: 2),
+                          // Label selalu tampil, 12sp (tsSurahMeta).
+                          Text(
+                            tabs[i].label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
+                                .copyWith(
+                                  color: i == selectedIndex
+                                      ? QuranTokens.brandColor(dark)
+                                      : QuranTokens.secondaryColor(dark),
+                                ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

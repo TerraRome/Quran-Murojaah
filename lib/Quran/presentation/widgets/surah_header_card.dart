@@ -70,7 +70,7 @@ class SurahHeaderCard extends StatelessWidget {
             right: 0,
             bottom: 0,
             child: Opacity(
-              opacity: 0.3,
+              opacity: 0.15,
               child: Image.asset(
                 'assets/quran/mushaf.png',
                 width: 160,

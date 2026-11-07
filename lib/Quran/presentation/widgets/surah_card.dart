@@ -32,10 +32,14 @@ class SurahCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        surah.revelationType.label,
-                        style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                            .copyWith(color: secondary, letterSpacing: 0.5),
+                      Flexible(
+                        child: Text(
+                          surah.revelationType.label,
+                          overflow: TextOverflow.ellipsis,
+                          style: QuranTokens.poppins(
+                            QuranTokens.tsSurahMeta,
+                          ).copyWith(color: secondary, letterSpacing: 0.5),
+                        ),
                       ),
                       const SizedBox(width: 5),
                       Container(
@@ -47,18 +51,23 @@ class SurahCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 5),
-                      Text(
-                        '${surah.totalVerses} Ayat',
-                        style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                            .copyWith(color: secondary, letterSpacing: 0.5),
+                      Flexible(
+                        child: Text(
+                          '${surah.totalVerses} Ayat',
+                          overflow: TextOverflow.ellipsis,
+                          style: QuranTokens.poppins(
+                            QuranTokens.tsSurahMeta,
+                          ).copyWith(color: secondary, letterSpacing: 0.5),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     surah.transliteration,
-                    style: QuranTokens.poppins(QuranTokens.tsSurahName)
-                        .copyWith(color: QuranTokens.inkColor(dark)),
+                    style: QuranTokens.poppins(
+                      QuranTokens.tsSurahName,
+                    ).copyWith(color: QuranTokens.inkColor(dark)),
                   ),
                 ],
               ),
@@ -67,8 +76,9 @@ class SurahCard extends StatelessWidget {
               surah.name,
               textDirection: TextDirection.rtl,
               textAlign: TextAlign.right,
-              style: QuranTokens.amiri(QuranTokens.tsArabicName)
-                  .copyWith(color: arabicColor),
+              style: QuranTokens.amiri(
+                QuranTokens.tsArabicName,
+              ).copyWith(color: arabicColor),
             ),
           ],
         ),
@@ -100,8 +110,9 @@ class _SurahNumberBadge extends StatelessWidget {
           ),
           Text(
             '$number',
-            style: QuranTokens.poppins(QuranTokens.tsVerseNumber)
-                .copyWith(color: QuranTokens.inkColor(dark)),
+            style: QuranTokens.poppins(
+              QuranTokens.tsVerseNumber,
+            ).copyWith(color: QuranTokens.inkColor(dark)),
           ),
         ],
       ),

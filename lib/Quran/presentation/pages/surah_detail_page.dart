@@ -481,6 +481,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
           titleColor: QuranTokens.brandColor(dark),
           leading: IconButton(
             onPressed: () => context.pop(),
+            tooltip: 'Kembali',
             icon: const Icon(Icons.arrow_back_ios_new, size: 20),
             color: QuranTokens.inkColor(dark),
           ),

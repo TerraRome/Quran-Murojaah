@@ -30,9 +30,9 @@ class QuranTopBar extends StatelessWidget {
       child: Row(
         children: [
           if (leading != null)
-            SizedBox(width: 30, height: 30, child: leading)
+            SizedBox(width: 48, height: 48, child: leading)
           else
-            const SizedBox(width: 30, height: 30),
+            const SizedBox(width: 48, height: 48),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -44,6 +44,7 @@ class QuranTopBar extends StatelessWidget {
           if (onThemeToggle != null)
             IconButton(
               onPressed: onThemeToggle,
+              tooltip: dark ? 'Mode terang' : 'Mode gelap',
               icon: Icon(
                 dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
                 size: 24,
@@ -53,6 +54,7 @@ class QuranTopBar extends StatelessWidget {
           if (onSearch != null)
             IconButton(
               onPressed: onSearch,
+              tooltip: 'Cari surah',
               padding: EdgeInsets.zero,
               icon: const QuranHeaderIcon(asset: 'assets/quran/search_line.svg'),
             ),

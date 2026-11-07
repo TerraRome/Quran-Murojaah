@@ -157,7 +157,7 @@ class _VerseHeader extends StatelessWidget {
     final dark = QuranThemeScope.darkOf(context);
     final iconColor = QuranTokens.arabicNameColor(dark);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: QuranTokens.verseBg(dark),
         borderRadius: BorderRadius.circular(QuranTokens.radiusCard),
@@ -167,17 +167,19 @@ class _VerseHeader extends StatelessWidget {
           _VerseNumberBadge(number: number),
           const Spacer(),
 
-          // Share
-          QuranHeaderIcon(
-            asset: 'assets/quran/share.svg',
-            color: iconColor,
+          // Share (belum ada aksi; dihubungkan di fitur berikutnya)
+          _HeaderAction(
+            label: 'Bagikan ayat $number',
+            child: QuranHeaderIcon(
+              asset: 'assets/quran/share.svg',
+              color: iconColor,
+            ),
           ),
-          const SizedBox(width: 16),
 
           // Play / Stop ayat
-          GestureDetector(
+          _HeaderAction(
+            label: isPlaying ? 'Hentikan ayat $number' : 'Putar ayat $number',
             onTap: onPlayTap,
-            behavior: HitTestBehavior.opaque,
             child: isPlaying
                 ? Icon(Icons.stop_rounded, color: QuranTokens.brandColor(dark), size: 20)
                 : QuranHeaderIcon(
@@ -185,19 +187,20 @@ class _VerseHeader extends StatelessWidget {
                     color: iconColor,
                   ),
           ),
-          const SizedBox(width: 16),
 
-          // Bookmark
-          QuranHeaderIcon(
-            asset: 'assets/quran/bookmark.svg',
-            color: iconColor,
+          // Bookmark (belum ada aksi; dihubungkan di fitur berikutnya)
+          _HeaderAction(
+            label: 'Simpan ayat $number',
+            child: QuranHeaderIcon(
+              asset: 'assets/quran/bookmark.svg',
+              color: iconColor,
+            ),
           ),
-          const SizedBox(width: 16),
 
           // Tafsir (ℹ)
-          GestureDetector(
+          _HeaderAction(
+            label: 'Tafsir ayat $number',
             onTap: onTafsirTap,
-            behavior: HitTestBehavior.opaque,
             child: Icon(
               Icons.info_outline_rounded,
               color: iconColor,
@@ -205,6 +208,30 @@ class _VerseHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Ikon aksi header dengan area sentuh minimal 48x48 dan label semantik.
+class _HeaderAction extends StatelessWidget {
+  const _HeaderAction({required this.label, required this.child, this.onTap});
+
+  final String label;
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(width: 48, height: 48, child: Center(child: child)),
       ),
     );
   }

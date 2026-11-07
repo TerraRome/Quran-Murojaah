@@ -69,6 +69,25 @@ void main() {
     expect(find.text(latinVerse.transliteration), findsOneWidget);
   });
 
+  testWidgets('BC-04: ikon aksi >=48dp dan berlabel', (tester) async {
+    final handle = tester.ensureSemantics();
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    for (final l in [
+      'Putar ayat 2',
+      'Simpan ayat 2',
+      'Bagikan ayat 2',
+      'Tafsir ayat 2',
+    ]) {
+      expect(find.bySemanticsLabel(l), findsOneWidget);
+    }
+    await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    handle.dispose();
+  });
+
   testWidgets('menampilkan Arab, terjemahan, dan nomor ayat', (tester) async {
     await tester.pumpWidget(wrap());
 

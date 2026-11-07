@@ -72,7 +72,8 @@ class TransliterationPrefetchService {
   }
 
   /// Muat transliteration untuk satu surah dari cache, lalu inject ke
-  /// list verses. Digunakan oleh MushafRendererPage saat load surah.
+  /// list verses. Digunakan oleh QuranController.loadLatin (halaman detail surah
+  /// dan Dengar lalu Tirukan).
   ///
   /// Mengembalikan map nomorAyat → (transliteration, normalizedText).
   Future<Map<int, ({String transliteration, String normalizedText})>>

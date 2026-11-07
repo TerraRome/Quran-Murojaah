@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -166,6 +168,12 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     super.dispose();
   }
 
+  /// Latin (BC-01) menyusul setelah ayat tampil; gagal/offline = tanpa latin.
+  Future<void> _loadLatin() async {
+    final surah = await widget.controller.loadLatin(widget.surahNumber);
+    if (mounted && surah != null) setState(() => _surah = surah);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -185,6 +193,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
           : null;
     });
     if (surah != null) {
+      unawaited(_loadLatin());
       // Siapkan GlobalKey per ayat untuk auto-scroll
       if (_verseKeys.length != surah.totalVerses) {
         _verseKeys

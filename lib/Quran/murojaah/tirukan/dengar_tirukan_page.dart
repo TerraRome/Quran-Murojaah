@@ -65,6 +65,7 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
       return;
     }
     _surah = surah;
+    unawaited(_loadLatin());
     final build = widget.flowBuilder;
     if (build != null) {
       _flow = build(surah);
@@ -95,6 +96,12 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     }
     setState(() => _preparing = false);
     unawaited(_flow!.start());
+  }
+
+  /// Latin (BC-01) menyusul setelah ayat tampil; gagal/offline = tanpa latin.
+  Future<void> _loadLatin() async {
+    final surah = await widget.controller.loadLatin(widget.surahNumber);
+    if (mounted && surah != null) setState(() => _surah = surah);
   }
 
   @override

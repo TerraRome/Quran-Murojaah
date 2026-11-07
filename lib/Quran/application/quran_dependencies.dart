@@ -34,6 +34,7 @@ class QuranDependencies {
   static final QuranController controller = QuranController(
     _repository,
     _lastReadStore,
+    transliteration: transliterationService,
   );
 
   /// Ayat tersimpan (BC-05). Dimuat saat startup oleh halaman home.

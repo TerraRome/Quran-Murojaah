@@ -7,17 +7,25 @@ import '../domain/entities/surah.dart';
 import '../domain/failures/quran_failure.dart';
 import '../domain/repositories/quran_repository.dart';
 import 'last_read.dart';
+import 'transliteration_prefetch_service.dart';
 
 /// Status pemuatan data Quran.
 enum QuranLoadStatus { initial, loading, loaded, error }
 
 /// State sederhana module Quran (ValueNotifier, tanpa Bloc).
 class QuranController extends ValueNotifier<QuranState> {
-  QuranController(this._repository, this._lastReadStore)
-      : super(const QuranState.initial());
+  QuranController(
+    this._repository,
+    this._lastReadStore, {
+    TransliterationPrefetchService? transliteration,
+  })  : _transliteration = transliteration,
+        super(const QuranState.initial());
 
   final QuranRepository _repository;
   final LastReadStore _lastReadStore;
+
+  /// Sumber latin (BC-01). Null = ayat tampil tanpa latin.
+  final TransliterationPrefetchService? _transliteration;
 
   List<Surah> _surahs = const [];
 
@@ -39,6 +47,29 @@ class QuranController extends ValueNotifier<QuranState> {
         value = QuranState.loaded(surahs);
       },
     );
+  }
+
+  /// Suntik latin (cache, fallback online) ke ayat satu surah — `quran.json`
+  /// tidak memuat latin. Mengembalikan surah terbaru; latin tidak tersedia
+  /// (offline/belum pernah di-fetch) = surah apa adanya, tanpa error.
+  /// Normalized text sengaja tidak disuntik: tidak dipakai matching murojaah.
+  Future<Surah?> loadLatin(int surahNumber) async {
+    final latin = await _transliteration?.loadForSurah(surahNumber);
+    final i = _surahs.indexWhere((s) => s.number == surahNumber);
+    if (i < 0) return null;
+    if (latin == null || latin.isEmpty) return _surahs[i];
+    final surah = _surahs[i].withVerses([
+      for (final v in _surahs[i].verses)
+        latin[v.numberInSurah] == null
+            ? v
+            : v.withTransliteration(
+                transliteration: latin[v.numberInSurah]!.transliteration,
+                normalizedText: v.normalizedText,
+              ),
+    ]);
+    _surahs = [..._surahs]..[i] = surah;
+    value = QuranState.loaded(_surahs);
+    return surah;
   }
 
   /// Muat posisi baca terakhir dari penyimpanan lokal.

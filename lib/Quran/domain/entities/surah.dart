@@ -41,6 +41,17 @@ class Surah {
 
   bool get isMeccan => revelationType == RevelationType.meccan;
 
+  /// Salinan surah dengan daftar ayat pengganti (mis. setelah latin disuntik).
+  Surah withVerses(List<Verse> verses) => Surah(
+        number: number,
+        name: name,
+        transliteration: transliteration,
+        translation: translation,
+        revelationType: revelationType,
+        totalVerses: totalVerses,
+        verses: verses,
+      );
+
   factory Surah.fromJson(Map<String, dynamic> json) {
     final verses = (json['verses'] as List<dynamic>)
         .map((verse) => Verse.fromJson(verse as Map<String, dynamic>))

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../application/bookmark_controller.dart';
 import '../../../data/quran_tokens.dart';
 import '../../backup/backup_controller.dart';
 import '../../backup/backup_document.dart';
@@ -18,11 +19,13 @@ class BackupSettingsSection extends StatefulWidget {
     super.key,
     required this.progress,
     required this.reminder,
+    this.bookmarks,
     this.sharer = const SharePlusBackupSharer(),
   });
 
   final MurojaahProgressController progress;
   final MurojaahReminder reminder;
+  final BookmarkController? bookmarks;
   final BackupSharer sharer;
 
   @override
@@ -33,7 +36,11 @@ class _BackupSettingsSectionState extends State<BackupSettingsSection> {
   bool _busy = false;
 
   MurojaahBackup get _backup =>
-      MurojaahBackup(progress: widget.progress, reminder: widget.reminder);
+      MurojaahBackup(
+        progress: widget.progress,
+        reminder: widget.reminder,
+        bookmarks: widget.bookmarks,
+      );
 
   Future<void> _export() async {
     if (_busy) return;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:quran/Quran/application/bookmark_controller.dart';
 import 'package:quran/Quran/application/quran_controller.dart';
 import 'package:quran/Quran/doa/application/doa_controller.dart';
 import 'package:quran/Quran/doa/data/datasources/doa_local_datasource.dart';
@@ -132,6 +133,7 @@ void main() {
             murojaahProgress: MurojaahProgressController(
               store: MemoryActivityStore(),
             ),
+            bookmarks: BookmarkController(),
           ),
         ),
       ),
@@ -184,6 +186,7 @@ void main() {
             murojaahProgress: MurojaahProgressController(
               store: MemoryActivityStore(),
             ),
+            bookmarks: BookmarkController(),
           ),
         ),
       ),

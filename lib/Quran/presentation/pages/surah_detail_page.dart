@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../application/bookmark_controller.dart';
 import '../../application/quran_controller.dart';
 import '../../data/datasources/audio_local_datasource.dart';
 import '../../data/datasources/equran_remote_datasource.dart';
@@ -34,6 +35,8 @@ class SurahDetailPage extends StatefulWidget {
     required this.surahNumber,
     required this.controller,
     this.readingProgress,
+    this.bookmarks,
+    this.initialAyat,
   });
 
   final int surahNumber;
@@ -42,6 +45,12 @@ class SurahDetailPage extends StatefulWidget {
   /// Log aktivitas untuk mencatat "ayat dibaca". Null = tidak mencatat
   /// (dipakai pratinjau/test lama).
   final MurojaahProgressController? readingProgress;
+
+  /// Ayat tersimpan (BC-05). Null = ikon simpan tidak aktif.
+  final BookmarkController? bookmarks;
+
+  /// Ayat yang di-scroll saat halaman dibuka (dari tab Bookmark, BC-06).
+  final int? initialAyat;
 
   @override
   State<SurahDetailPage> createState() => _SurahDetailPageState();
@@ -174,7 +183,41 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.controller.setLastRead(surah.number, 1);
       });
+      final target = widget.initialAyat;
+      if (target != null && target >= 1 && target <= surah.totalVerses) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _scrollToAyat(target),
+        );
+      }
     }
+  }
+
+  /// Scroll ke [ayat]. ListView.builder baru membangun item yang dekat
+  /// viewport, jadi bila kunci belum punya context, geser selangkah ke arah
+  /// ayat itu (berdasarkan ayat terbangun terdekat) lalu coba lagi.
+  void _scrollToAyat(int ayat, [int attempt = 0]) {
+    if (!mounted || !_scrollController.hasClients) return;
+    final ctx = _verseKeys[ayat - 1].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.15,
+      );
+      return;
+    }
+    if (attempt >= 60) return;
+    final built = _verseKeys.indexWhere((k) => k.currentContext != null);
+    final pos = _scrollController.position;
+    final forward = built == -1 || built + 1 < ayat;
+    final step = pos.viewportDimension * (forward ? 1 : -1);
+    _scrollController.jumpTo(
+      (pos.pixels + step).clamp(0.0, pos.maxScrollExtent),
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToAyat(ayat, attempt + 1),
+    );
   }
 
   /// Tandai semua ayat yang sedang tampil sebagai sudah dibaca.
@@ -195,6 +238,26 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       surahNumber: surah.number,
       totalAyat: surah.totalVerses,
       readingProgress: widget.readingProgress,
+    );
+  }
+
+  /// Toggle simpan ayat; saat menyimpan, tawarkan "Batal" (BC-05).
+  Future<void> _toggleBookmark(int ayatNumber) async {
+    final bookmarks = widget.bookmarks;
+    final surah = _surah;
+    if (bookmarks == null || surah == null) return;
+    final saved = await bookmarks.toggle(surah.number, ayatNumber);
+    if (!saved || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Ayat disimpan'),
+        action: SnackBarAction(
+          label: 'Batal',
+          onPressed: () => bookmarks.remove(surah.number, ayatNumber),
+        ),
+      ),
     );
   }
 
@@ -464,18 +527,27 @@ class _SurahDetailPageState extends State<SurahDetailPage>
                           itemKey: '${surah.number}:${verse.numberInSurah}',
                           surahNumber: surah.number,
                           verse: verse.numberInSurah,
-                          child: VerseView(
+                          child: ListenableBuilder(
+                            listenable:
+                                widget.bookmarks ?? _murottalController,
+                            builder: (context, _) => VerseView(
                           verse: verse,
                           surahNumber: surah.number,
                           showDivider: !isLastVerse,
                           isPlaying: isPlaying,
                           isHighlighted: isHighlighted,
+                          isBookmarked: widget.bookmarks?.isSaved(
+                                  surah.number, verse.numberInSurah) ??
+                              false,
                           onTap: () => widget.controller
                               .setLastRead(surah.number, verse.numberInSurah),
                           onPlayTap: () =>
                               _onPlayAyat(verse.numberInSurah),
                           onTafsirTap: () =>
                               _openTafsir(verse.numberInSurah),
+                          onBookmarkTap: () =>
+                              _toggleBookmark(verse.numberInSurah),
+                            ),
                           ),
                         ),
                       );

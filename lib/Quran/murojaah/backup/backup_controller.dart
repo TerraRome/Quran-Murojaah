@@ -1,3 +1,4 @@
+import '../../application/bookmark_controller.dart';
 import '../progress/activity_store.dart';
 import '../progress/progress_controller.dart';
 import '../progress/progress_service.dart';
@@ -10,10 +11,17 @@ import 'backup_document.dart';
 /// [MurojaahProgressController] dan [MurojaahReminder], jadi setelah impor UI
 /// ikut berubah lewat notifier yang sama.
 class MurojaahBackup {
-  MurojaahBackup({required this.progress, required this.reminder});
+  MurojaahBackup({
+    required this.progress,
+    required this.reminder,
+    this.bookmarks,
+  });
 
   final MurojaahProgressController progress;
   final MurojaahReminder reminder;
+
+  /// Ayat tersimpan; null = tidak ikut dicadangkan.
+  final BookmarkController? bookmarks;
 
   /// Snapshot teks JSON dari kondisi sekarang.
   BackupDocument document() => BackupDocument(
@@ -22,6 +30,7 @@ class MurojaahBackup {
     reminderEnabled: reminder.enabled,
     reminderHour: reminder.hour,
     reminderMinute: reminder.minute,
+    bookmarks: bookmarks?.items ?? const [],
   );
 
   String exportJson() => document().encode();
@@ -33,18 +42,21 @@ class MurojaahBackup {
   ///
   /// Dipakai untuk ringkasan "N entri baru" **sebelum** menyimpan.
   int countNew(BackupDocument document) =>
-      newEntries(progress.entries, document.entries).length;
+      newEntries(progress.entries, document.entries).length +
+      (bookmarks?.countNew(document.bookmarks) ?? 0);
 
   /// Terapkan cadangan: gabungkan entri, pulihkan target dan pengaturan
   /// pengingat, lalu bangun ulang jadwal notifikasi.
   ///
   /// Mengembalikan jumlah entri baru. Entri yang id-nya sudah ada tidak
-  /// ditimpa dan tidak dihitung.
+  /// ditimpa dan tidak dihitung. Ayat tersimpan digabung; cadangan lama tanpa
+  /// bookmark membiarkan bookmark perangkat apa adanya.
   Future<int> import(BackupDocument document) async {
     final fresh = newEntries(progress.entries, document.entries);
     if (fresh.isNotEmpty) {
       await progress.replaceEntries([...progress.entries, ...fresh]);
     }
+    await bookmarks?.merge(document.bookmarks);
     await progress.restoreGoal(DailyGoal.fromVerses(document.goalVerses));
     await reminder.restoreSettings(
       enabled: document.reminderEnabled,

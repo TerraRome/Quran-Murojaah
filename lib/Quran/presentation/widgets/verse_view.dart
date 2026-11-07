@@ -18,6 +18,8 @@ class VerseView extends StatelessWidget {
     this.showDivider = true,
     this.onPlayTap,
     this.onTafsirTap,
+    this.onBookmarkTap,
+    this.isBookmarked = false,
     this.isPlaying = false,
     this.isHighlighted = false,
   });
@@ -34,6 +36,12 @@ class VerseView extends StatelessWidget {
 
   /// Callback saat ikon tafsir (ℹ) di-tap.
   final VoidCallback? onTafsirTap;
+
+  /// Callback saat ikon simpan di-tap (toggle bookmark, BC-05).
+  final VoidCallback? onBookmarkTap;
+
+  /// True jika ayat ini sudah disimpan (ikon terisi).
+  final bool isBookmarked;
 
   /// True jika ayat ini sedang diputar (ikon play berubah jadi stop).
   final bool isPlaying;
@@ -75,6 +83,8 @@ class VerseView extends StatelessWidget {
             number: verse.numberInSurah,
             onPlayTap: onPlayTap,
             onTafsirTap: onTafsirTap,
+            onBookmarkTap: onBookmarkTap,
+            isBookmarked: isBookmarked,
             isPlaying: isPlaying,
           ),
           Padding(
@@ -144,12 +154,16 @@ class _VerseHeader extends StatelessWidget {
     required this.number,
     this.onPlayTap,
     this.onTafsirTap,
+    this.onBookmarkTap,
+    this.isBookmarked = false,
     this.isPlaying = false,
   });
 
   final int number;
   final VoidCallback? onPlayTap;
   final VoidCallback? onTafsirTap;
+  final VoidCallback? onBookmarkTap;
+  final bool isBookmarked;
   final bool isPlaying;
 
   @override
@@ -188,13 +202,18 @@ class _VerseHeader extends StatelessWidget {
                   ),
           ),
 
-          // Bookmark (belum ada aksi; dihubungkan di fitur berikutnya)
+          // Bookmark: SVG outline bila belum disimpan, ikon Material terisi bila sudah
           _HeaderAction(
-            label: 'Simpan ayat $number',
-            child: QuranHeaderIcon(
-              asset: 'assets/quran/bookmark.svg',
-              color: iconColor,
-            ),
+            label: isBookmarked
+                ? 'Hapus simpanan ayat $number'
+                : 'Simpan ayat $number',
+            onTap: onBookmarkTap,
+            child: isBookmarked
+                ? Icon(Icons.bookmark_rounded, color: iconColor, size: 24)
+                : QuranHeaderIcon(
+                    asset: 'assets/quran/bookmark.svg',
+                    color: iconColor,
+                  ),
           ),
 
           // Tafsir (ℹ)

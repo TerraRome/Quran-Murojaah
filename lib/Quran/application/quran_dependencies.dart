@@ -14,6 +14,7 @@ import '../shalat/application/location_service.dart';
 import '../shalat/application/shalat_controller.dart';
 import '../shalat/data/datasources/shalat_local_datasource.dart';
 import '../shalat/data/datasources/shalat_remote_datasource.dart';
+import 'bookmark_controller.dart';
 import 'quran_controller.dart';
 import 'transliteration_prefetch_service.dart';
 
@@ -34,6 +35,9 @@ class QuranDependencies {
     _repository,
     _lastReadStore,
   );
+
+  /// Ayat tersimpan (BC-05). Dimuat saat startup oleh halaman home.
+  static final BookmarkController bookmarks = BookmarkController();
 
   static final DoaController doaController = DoaController(
     remote: DoaRemoteDataSourceImpl(),

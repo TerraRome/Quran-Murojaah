@@ -18,7 +18,7 @@ import 'presentation/widgets/quran_theme_scope.dart';
 /// Route tree:
 ///   /                                        → QuranSplashPage
 ///   /home/quran/home                         → QuranHomePage
-///   /home/quran/surah/:number                → SurahDetailPage
+///   /home/quran/surah/:number[?ayat=N]       → SurahDetailPage
 ///   /home/quran/settings                     → SettingsPage
 ///   /home/quran/murottal-settings            → MurottalSettingsPage
 ///   /home/quran/murojaah/map                 → HafalanMapPage
@@ -40,6 +40,7 @@ final GoRouter quranRouter = GoRouter(
             doaController: QuranDependencies.doaController,
             shalatController: QuranDependencies.shalatController,
             murojaahProgress: QuranDependencies.murojaahProgress,
+            bookmarks: QuranDependencies.bookmarks,
           ),
         ),
         GoRoute(
@@ -50,6 +51,10 @@ final GoRouter quranRouter = GoRouter(
               surahNumber: number,
               controller: QuranDependencies.controller,
               readingProgress: QuranDependencies.murojaahProgress,
+              bookmarks: QuranDependencies.bookmarks,
+              initialAyat: int.tryParse(
+                state.uri.queryParameters['ayat'] ?? '',
+              ),
             );
           },
         ),

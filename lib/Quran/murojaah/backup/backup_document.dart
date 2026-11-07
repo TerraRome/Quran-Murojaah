@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../application/bookmark.dart';
 import '../progress/activity_entry.dart';
 import '../progress/activity_store.dart';
 
@@ -20,6 +21,7 @@ class BackupDocument {
     required this.reminderEnabled,
     required this.reminderHour,
     required this.reminderMinute,
+    this.bookmarks = const [],
     this.exportedAt,
   });
 
@@ -28,6 +30,9 @@ class BackupDocument {
   final bool reminderEnabled;
   final int reminderHour;
   final int reminderMinute;
+
+  /// Ayat tersimpan. Cadangan lama tanpa kunci ini terbaca sebagai kosong.
+  final List<Bookmark> bookmarks;
   final DateTime? exportedAt;
 
   Map<String, Object?> toJson() => {
@@ -42,6 +47,7 @@ class BackupDocument {
       'minute': reminderMinute,
     },
     'entries': [for (final e in entries) e.toJson()],
+    'bookmarks': [for (final b in bookmarks) b.toJson()],
   };
 
   String encode({bool pretty = true}) =>
@@ -124,6 +130,12 @@ BackupParse decodeBackup(String raw) {
     return const BackupInvalid('Semua entri di berkas rusak atau tidak dikenali.');
   }
 
+  final rawBookmarks = decoded['bookmarks'];
+  final bookmarks = <Bookmark>[
+    if (rawBookmarks is List)
+      for (final item in rawBookmarks) ?Bookmark.fromJson(item),
+  ];
+
   final reminder = decoded['reminder'];
   final goal = decoded['goalVerses'];
 
@@ -144,6 +156,7 @@ BackupParse decodeBackup(String raw) {
         59,
         0,
       ),
+      bookmarks: bookmarks,
       exportedAt: DateTime.tryParse('${decoded['exportedAt']}'),
     ),
   );

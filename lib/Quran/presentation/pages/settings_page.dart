@@ -126,6 +126,7 @@ class SettingsPage extends StatelessWidget {
                       BackupSettingsSection(
                         progress: QuranDependencies.murojaahProgress,
                         reminder: QuranDependencies.reminder,
+                        bookmarks: QuranDependencies.bookmarks,
                       ),
                       const SizedBox(height: 24),
                     ],

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
+import '../../application/bookmark_controller.dart';
 import '../../application/quran_controller.dart';
 import '../../data/quran_tokens.dart';
 import '../../doa/application/doa_controller.dart';
@@ -17,6 +17,7 @@ import '../widgets/quran_status_bar.dart';
 import '../widgets/quran_theme_scope.dart';
 import '../widgets/quran_top_bar.dart';
 import '../widgets/surah_card.dart';
+import 'bookmark_page.dart';
 
 /// Home module Quran (Figma "Home"): greeting, kartu Last Read, daftar surah,
 /// dan bottom tab (Quran - Murojaah - Shalat - Doa - Bookmark).
@@ -27,12 +28,14 @@ class QuranHomePage extends StatefulWidget {
     required this.doaController,
     required this.shalatController,
     required this.murojaahProgress,
+    required this.bookmarks,
   });
 
   final QuranController controller;
   final DoaController doaController;
   final ShalatController shalatController;
   final MurojaahProgressController murojaahProgress;
+  final BookmarkController bookmarks;
 
   @override
   State<QuranHomePage> createState() => _QuranHomePageState();
@@ -57,6 +60,7 @@ class _QuranHomePageState extends State<QuranHomePage> {
     super.initState();
     widget.controller.load();
     widget.controller.loadLastRead();
+    widget.bookmarks.load();
     // Jumlah ayat per surah disuntikkan ke mesin progres: bonus "satu surah
     // tamat" diturunkan dari log + angka ini, tanpa field baru di entri.
     widget.murojaahProgress.verseCount = (number) =>
@@ -326,23 +330,12 @@ class _QuranHomePageState extends State<QuranHomePage> {
         ),
       ];
     }
-    if (_tabIndex != 0) {
-      final tab = _bottomTabs[_tabIndex];
+    if (_tabIndex == 4) {
       return [
         SliverFillRemaining(
-          hasScrollBody: false,
-          child: _EmptyState(
-            icon: SvgPicture.asset(
-              tab.asset,
-              width: 48,
-              height: 48,
-              colorFilter: ColorFilter.mode(
-                QuranTokens.secondaryColor(dark),
-                BlendMode.srcIn,
-              ),
-            ),
-            message: '${tab.label} — Segera hadir',
-            dark: dark,
+          child: BookmarkPage(
+            bookmarks: widget.bookmarks,
+            controller: widget.controller,
           ),
         ),
       ];

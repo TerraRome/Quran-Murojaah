@@ -13,16 +13,25 @@ class BookmarkController extends ChangeNotifier {
 
   List<Bookmark> get items => _items;
 
-  Future<void> load() async {
+  Future<void>? _loading;
+
+  Future<void> load() => _loading = _load();
+
+  Future<void> _load() async {
     _items = _sorted(await _store.load());
     notifyListeners();
   }
+
+  // Perubahan menunggu muatan pertama; tanpa ini simpan sebelum load selesai
+  // menimpa daftar tersimpan dengan daftar kosong.
+  Future<void> _ready() => _loading ?? load();
 
   bool isSaved(int surah, int ayat) =>
       _items.any((b) => b.isSame(surah, ayat));
 
   /// Simpan bila belum ada, hapus bila sudah. True = sekarang tersimpan.
   Future<bool> toggle(int surah, int ayat, {DateTime? at}) async {
+    await _ready();
     if (isSaved(surah, ayat)) {
       await remove(surah, ayat);
       return false;
@@ -34,15 +43,18 @@ class BookmarkController extends ChangeNotifier {
     return true;
   }
 
-  Future<void> remove(int surah, int ayat) =>
-      _commit([
-        for (final b in _items)
-          if (!b.isSame(surah, ayat)) b,
-      ]);
+  Future<void> remove(int surah, int ayat) async {
+    await _ready();
+    await _commit([
+      for (final b in _items)
+        if (!b.isSame(surah, ayat)) b,
+    ]);
+  }
 
   /// Gabungkan [incoming] (impor cadangan); ayat yang sudah ada tidak ditimpa.
   /// Mengembalikan jumlah yang bertambah.
   Future<int> merge(List<Bookmark> incoming) async {
+    await _ready();
     final fresh = <Bookmark>[];
     for (final b in incoming) {
       if (!isSaved(b.surah, b.ayat) &&

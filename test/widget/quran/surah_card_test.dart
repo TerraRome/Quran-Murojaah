@@ -32,4 +32,35 @@ void main() {
     expect(find.text('MADINAH'), findsNothing);
     expect(find.text('286 VERSES'), findsNothing);
   });
+
+  testWidgets('nomor 3 digit utuh tanpa overflow di 360dp skala 2.0 (NF-1)',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const QuranThemeScope(
+        child: MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(2.0)),
+            child: Scaffold(
+              body: SurahCard(
+                surah: Surah(
+                  number: 114,
+                  name: 'الناس',
+                  transliteration: 'An-Nas',
+                  translation: 'Manusia',
+                  revelationType: RevelationType.meccan,
+                  totalVerses: 6,
+                  verses: [],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('114'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

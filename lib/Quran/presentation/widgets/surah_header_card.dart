@@ -147,7 +147,7 @@ class SurahHeaderCard extends StatelessWidget {
 /// - DownloadCompleted + playing → "Jeda Murottal" + pause icon
 /// - DownloadCompleted + paused  → "Lanjutkan Murottal" + play icon
 /// - DownloadCompleted + idle    → "Putar Murottal" + play icon
-/// - DownloadIdle/Error          → "Download Murottal" + download icon
+/// - DownloadIdle/Error          → "Unduh Murottal" + download icon
 class _MurottalActionButton extends StatelessWidget {
   const _MurottalActionButton({
     required this.downloadState,
@@ -245,7 +245,7 @@ class _MurottalActionButton extends StatelessWidget {
         ),
         icon: const Icon(Icons.download_rounded, size: 20),
         label: Text(
-          'Download Murottal',
+          'Unduh Murottal',
           style: QuranTokens.poppins(
               const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         ),

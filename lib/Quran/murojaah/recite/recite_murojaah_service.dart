@@ -153,7 +153,8 @@ class ReciteMurojaahService implements ReciteSessionEngine {
       _setStatus(ReciteMurojaahStatus.ready);
       _log('ready: surah=$surahNumber verses=${_verses.length}');
     } catch (e) {
-      _fail('Gagal menyiapkan mesin murojaah: $e');
+      debugPrint('[ReciteMurojaahService] gagal menyiapkan mesin: $e');
+      _fail('Mesin murojaah belum bisa disiapkan. Coba lagi.');
     }
   }
 
@@ -176,7 +177,8 @@ class ReciteMurojaahService implements ReciteSessionEngine {
             tracker.feedAudioChunk(chunk, isFinal: isFinal),
       );
     } catch (e) {
-      _fail('Gagal membuka mikrofon: $e');
+      debugPrint('[ReciteMurojaahService] gagal membuka mikrofon: $e');
+      _fail('Mikrofon tidak bisa dibuka. Pastikan tidak dipakai aplikasi lain.');
       return;
     }
     _listening = true;

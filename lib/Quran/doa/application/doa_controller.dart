@@ -164,7 +164,8 @@ class DoaController extends ValueNotifier<DoaState> {
         value = DoaError(e.message);
       }
     } catch (e) {
-      value = DoaError('Terjadi kesalahan: $e');
+      debugPrint('[Doa] gagal memuat: $e');
+      value = const DoaError('Doa belum bisa dimuat. Coba lagi nanti.');
     }
   }
 

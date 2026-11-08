@@ -43,6 +43,7 @@ class SurahDetailPage extends StatefulWidget {
     this.readingProgress,
     this.bookmarks,
     this.initialAyat,
+    @visibleForTesting this.murottalController,
   });
 
   final int surahNumber;
@@ -58,12 +59,19 @@ class SurahDetailPage extends StatefulWidget {
   /// Ayat yang di-scroll saat halaman dibuka (dari tab Bookmark, BC-06).
   final int? initialAyat;
 
+  /// Hanya untuk test: pengganti controller murottal bawaan (tetap di-dispose
+  /// oleh halaman).
+  final MurottalController? murottalController;
+
   @override
   State<SurahDetailPage> createState() => _SurahDetailPageState();
 }
 
 class _SurahDetailPageState extends State<SurahDetailPage>
     with WidgetsBindingObserver {
+  // Surah yang sedang tampil. Awalnya widget.surahNumber, lalu ikut pindah
+  // saat murottal lanjut otomatis ke surah berikutnya (BL-07-7).
+  late int _surahNumber = widget.surahNumber;
   Surah? _surah;
   bool _loading = true;
   QuranFailure? _error;
@@ -91,7 +99,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     _remoteDatasource = EquranRemoteDataSourceImpl();
     _localDataSource = AudioLocalDataSourceImpl();
     _tafsirController = TafsirController(datasource: _remoteDatasource);
-    _murottalController = MurottalController(
+    _murottalController = widget.murottalController ?? MurottalController(
       datasource: _remoteDatasource,
       localDataSource: _localDataSource,
       qariStore: QariStore.defaults(),
@@ -125,7 +133,10 @@ class _SurahDetailPageState extends State<SurahDetailPage>
   void _onMurottalStateChanged() {
     final state = _murottalController.value;
     if (state is! MurottalPlaying) return;
-    if (state.surahNumber != widget.surahNumber) return;
+    if (state.surahNumber != _surahNumber) {
+      _followSurah(state.surahNumber);
+      return;
+    }
     final ayat = state.currentAyat;
     if (ayat == 0 || ayat == _lastScrolledAyat) return;
     final keyIndex = ayat - 1;
@@ -141,6 +152,17 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     );
   }
 
+  /// Murottal pindah ke surah lain (lanjut otomatis): muat surah itu di halaman
+  /// yang sama supaya controller (dan audio) tidak ikut dibuang.
+  void _followSurah(int number) {
+    if (!mounted || _loading) return;
+    _readingRecorder.flush();
+    _surahNumber = number;
+    _lastScrolledAyat = 0;
+    _load(followed: true);
+    unawaited(_downloadController.checkIfDownloaded(_activeQari.id, number));
+  }
+
   /// Update qari controller setelah SharedPreferences siap,
   /// lalu cek apakah file sudah ada lokal untuk qari ini.
   Future<void> _initQariFromPrefs() async {
@@ -151,7 +173,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     _activeQari = store.getSelectedQari();
     await _downloadController.checkIfDownloaded(
       _activeQari.id,
-      widget.surahNumber,
+      _surahNumber,
     );
   }
 
@@ -171,11 +193,11 @@ class _SurahDetailPageState extends State<SurahDetailPage>
 
   /// Latin (BC-01) menyusul setelah ayat tampil; gagal/offline = tanpa latin.
   Future<void> _loadLatin() async {
-    final surah = await widget.controller.loadLatin(widget.surahNumber);
+    final surah = await widget.controller.loadLatin(_surahNumber);
     if (mounted && surah != null) setState(() => _surah = surah);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool followed = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -184,7 +206,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       await widget.controller.load();
     }
     final surah = widget.controller.surahs
-        .where((s) => s.number == widget.surahNumber)
+        .where((s) => s.number == _surahNumber)
         .firstOrNull;
     setState(() {
       _surah = surah;
@@ -204,7 +226,7 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.controller.setLastRead(surah.number, 1);
       });
-      final target = widget.initialAyat;
+      final target = followed ? null : widget.initialAyat;
       if (target != null && target >= 1 && target <= surah.totalVerses) {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _scrollToAyat(target),

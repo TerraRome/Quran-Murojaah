@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:quran/Quran/data/datasources/equran_remote_datasource.dart';
+import 'package:quran/Quran/data/datasources/audio_local_datasource.dart';
 import 'package:quran/Quran/murottal/application/murottal_controller.dart';
 import 'package:quran/Quran/murottal/application/qari_store.dart';
 import 'package:quran/Quran/domain/entities/qari.dart';
@@ -83,7 +83,7 @@ class _FakePlayer extends Fake implements AudioPlayer {
   Future<void> dispose() async {}
 }
 
-class _FakeRemote extends Fake implements EquranRemoteDataSource {}
+class _FakeLocal extends Fake implements AudioLocalDataSource {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -93,7 +93,7 @@ void main() {
   testWidgets('murottal lanjut ke surah berikutnya: halaman ikut pindah',
       (tester) async {
     final audio = MurottalController(
-      datasource: _FakeRemote(),
+      localDataSource: _FakeLocal(),
       qariStore: QariStore.defaults(),
       player: _FakePlayer(),
     );

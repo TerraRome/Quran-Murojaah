@@ -232,6 +232,7 @@ class _MurottalActionButton extends StatelessWidget {
     }
 
     // Belum tersimpan (idle / error / checking) — tombol download
+    final redownload = downloadState is DownloadNeedsRedownload;
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
@@ -245,7 +246,7 @@ class _MurottalActionButton extends StatelessWidget {
         ),
         icon: const Icon(Icons.download_rounded, size: 20),
         label: Text(
-          'Unduh Murottal',
+          redownload ? 'Unduh Ulang Murottal' : 'Unduh Murottal',
           style: QuranTokens.poppins(
               const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         ),

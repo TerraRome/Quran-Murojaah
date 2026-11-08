@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../data/datasources/audio_local_datasource.dart';
-import '../../data/datasources/equran_remote_datasource.dart';
-import '../../data/models/surah_audio_model.dart';
 import '../../domain/entities/qari.dart';
 import '../../murottal/application/qari_store.dart';
 import 'murottal_prefs_store.dart';
@@ -99,6 +97,22 @@ class MurottalPaused extends MurottalState {
   final bool isFullSurah;
 }
 
+/// Surah belum diunduh (audio hanya diputar dari file lokal).
+class MurottalNotDownloaded extends MurottalState {
+  const MurottalNotDownloaded({
+    required this.surahNumber,
+    required this.surahName,
+    required this.totalAyat,
+    this.fromAutoNext = false,
+  });
+  final int surahNumber;
+  final String surahName;
+  final int totalAyat;
+
+  /// True bila ini surah berikutnya pada lanjut otomatis (bukan pilihan user).
+  final bool fromAutoNext;
+}
+
 class MurottalError extends MurottalState {
   const MurottalError(this.message);
   final String message;
@@ -107,17 +121,17 @@ class MurottalError extends MurottalState {
 /// Controller murottal — manajemen audio player dan state.
 ///
 /// Mendukung dua mode: full surah dan per ayat.
-/// Local-first: cek file lokal dulu, fallback ke stream jika belum didownload.
+/// Offline penuh: hanya memutar file per-ayat lokal; surah yang belum
+/// diunduh tidak diputar ([MurottalNotDownloaded]).
 /// State management: [ValueNotifier].
 class MurottalController extends ValueNotifier<MurottalState> {
   MurottalController({
-    required EquranRemoteDataSource datasource,
     required QariStore qariStore,
-    AudioLocalDataSource? localDataSource,
+    required AudioLocalDataSource localDataSource,
     AudioPlayer? player,
     MurottalPrefsStore prefsStore = const MurottalPrefsStore(),
     SurahInfoResolver? surahInfo,
-  })  : _datasource = datasource,
+  })  : _local = localDataSource,
         _qariStore = qariStore,
         _player = player ?? AudioPlayer(),
         _prefsStore = prefsStore,
@@ -228,7 +242,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
     run();
   }
 
-  final EquranRemoteDataSource _datasource;
+  final AudioLocalDataSource _local;
   QariStore _qariStore;
   final AudioPlayer _player;
 
@@ -238,8 +252,9 @@ class MurottalController extends ValueNotifier<MurottalState> {
     _qariStore = store;
   }
 
-  /// Cache audio model per surah (untuk lookup URL ayat).
-  final Map<int, SurahAudioModel> _audioCache = {};
+  /// Qari+surah yang sudah dicek lengkap, supaya tidak memindai ratusan file
+  /// pada setiap ayat.
+  String? _verified;
 
   void _listenToPlayer() {
     _player.playerStateStream.listen((state) {
@@ -296,6 +311,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
           ayatNumber: 1,
           totalAyat: info.totalAyat,
           isFullSurah: true,
+          fromAutoNext: true,
         );
       case PlayAyat(:final ayat, :final gap):
         void run() {
@@ -336,7 +352,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   void _failLoad(Object e) {
     debugPrint('Murottal: gagal memuat audio: $e');
     value = const MurottalError(
-        'Gagal memuat audio. Periksa koneksi internet, lalu coba lagi.');
+        'Gagal memuat audio. Coba lagi, atau unduh ulang surah ini.');
   }
 
   /// Ulang ayat yang sama tanpa memuat ulang sumber audio.
@@ -408,7 +424,9 @@ class MurottalController extends ValueNotifier<MurottalState> {
         totalAyat: totalAyat,
         isFullSurah: false,
       ).then((_) {
-        if (value is MurottalError) _finishOnce(false);
+        if (value is MurottalError || value is MurottalNotDownloaded) {
+          _finishOnce(false);
+        }
       }),
     );
     return done.future;
@@ -421,22 +439,28 @@ class MurottalController extends ValueNotifier<MurottalState> {
     required int ayatNumber,
     required int totalAyat,
     required bool isFullSurah,
+    bool fromAutoNext = false,
   }) async {
     _cancelGap();
     final qari = _qariStore.getSelectedQari();
     value = MurottalLoading(surahNumber: surahNumber, surahName: surahName);
 
     try {
-      final audioModel = await _getAudioModel(surahNumber);
-      final ayatModel = audioModel.ayat
-          .where((a) => a.nomorAyat == ayatNumber)
-          .firstOrNull;
-      if (ayatModel == null) throw const EquranApiException('Data ayat tidak ditemukan');
+      final key = '${qari.id}/$surahNumber';
+      if (_verified != key) {
+        if (!await _local.isSurahComplete(qari.id, surahNumber, totalAyat)) {
+          return _notDownloaded(
+              surahNumber, surahName, totalAyat, fromAutoNext);
+        }
+        _verified = key;
+      }
+      final path = await _local.getAyatPath(qari.id, surahNumber, ayatNumber);
+      if (path == null) {
+        _verified = null;
+        return _notDownloaded(surahNumber, surahName, totalAyat, fromAutoNext);
+      }
 
-      final url = ayatModel.audioUrl(qari.id);
-      if (url == null) throw const EquranApiException('URL audio ayat tidak ditemukan');
-
-      await _player.setUrl(url);
+      await _player.setFilePath(path);
       await _applySpeed();
 
       value = MurottalPlaying(
@@ -451,11 +475,19 @@ class MurottalController extends ValueNotifier<MurottalState> {
       );
 
       await _player.play();
-    } on EquranApiException catch (e) {
-      value = MurottalError(e.message);
     } catch (e) {
       _failLoad(e);
     }
+  }
+
+  void _notDownloaded(int surah, String name, int total, bool fromAutoNext) {
+    _player.stop();
+    value = MurottalNotDownloaded(
+      surahNumber: surah,
+      surahName: name,
+      totalAyat: total,
+      fromAutoNext: fromAutoNext,
+    );
   }
 
   /// Pause audio yang sedang berjalan.
@@ -550,15 +582,6 @@ class MurottalController extends ValueNotifier<MurottalState> {
     return current.surahNumber == surahNumber &&
         current.currentAyat == ayatNumber &&
         !current.isFullSurah;
-  }
-
-  Future<SurahAudioModel> _getAudioModel(int surahNumber) async {
-    if (_audioCache.containsKey(surahNumber)) {
-      return _audioCache[surahNumber]!;
-    }
-    final model = await _datasource.getSurahAudio(surahNumber);
-    _audioCache[surahNumber] = model;
-    return model;
   }
 
   @override

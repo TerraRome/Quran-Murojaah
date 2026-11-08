@@ -17,6 +17,7 @@ class DownloadProgressDialog extends StatelessWidget {
     required this.surahName,
     required this.onConfirm,
     required this.onCancel,
+    this.notice,
   });
 
   final DownloadController controller;
@@ -24,11 +25,15 @@ class DownloadProgressDialog extends StatelessWidget {
   final VoidCallback onConfirm;
   final VoidCallback onCancel;
 
+  /// Kalimat pembuka (mis. "Surah ini belum diunduh."), tampil di atas penjelasan.
+  final String? notice;
+
   static Future<void> show({
     required BuildContext context,
     required DownloadController controller,
     required String surahName,
     required VoidCallback onConfirm,
+    String? notice,
   }) {
     return showDialog<void>(
       context: context,
@@ -38,6 +43,33 @@ class DownloadProgressDialog extends StatelessWidget {
         surahName: surahName,
         onConfirm: onConfirm,
         onCancel: () => Navigator.of(context).pop(),
+        notice: notice,
+      ),
+    );
+  }
+
+  /// Alur lengkap: hitung perkiraan ukuran + cek ruang/jaringan, tampilkan
+  /// dialog konfirmasi, lalu unduh seluruh ayat surah.
+  static Future<void> run({
+    required BuildContext context,
+    required DownloadController controller,
+    required String qariId,
+    required int surahNumber,
+    required int verseCount,
+    required String surahName,
+    String? notice,
+  }) async {
+    await controller.prepare(qariId, verseCount);
+    if (!context.mounted) return;
+    await show(
+      context: context,
+      controller: controller,
+      surahName: surahName,
+      notice: notice,
+      onConfirm: () => controller.startDownload(
+        qariId: qariId,
+        surahNumber: surahNumber,
+        verseCount: verseCount,
       ),
     );
   }
@@ -80,6 +112,7 @@ class DownloadProgressDialog extends StatelessWidget {
           content: _DialogContent(
             state: state,
             surahName: surahName,
+            notice: notice,
           ),
           actions: _buildActions(context, state),
         );
@@ -88,6 +121,20 @@ class DownloadProgressDialog extends StatelessWidget {
   }
 
   List<Widget> _buildActions(BuildContext context, DownloadState state) {
+    if (state is DownloadReady && state.lowSpace) {
+      return [
+        TextButton(
+          onPressed: onCancel,
+          child: Text(
+            'Tutup',
+            style: QuranTokens.poppins(
+              TextStyle(color: QuranTokens.mutedOf(context)),
+            ),
+          ),
+        ),
+      ];
+    }
+
     if (state is DownloadReady) {
       return [
         TextButton(
@@ -110,7 +157,7 @@ class DownloadProgressDialog extends StatelessWidget {
           ),
           icon: const Icon(Icons.download_rounded, size: 16),
           label: Text(
-            'Unduh',
+            state.needsMobileConfirm ? 'Unduh dengan data seluler' : 'Unduh',
             style: QuranTokens.poppins(
               const TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -174,17 +221,19 @@ class _DialogContent extends StatelessWidget {
   const _DialogContent({
     required this.state,
     required this.surahName,
+    this.notice,
   });
 
   final DownloadState state;
   final String surahName;
+  final String? notice;
 
   @override
   Widget build(BuildContext context) {
     return switch (state) {
       DownloadCheckingSize() => _CheckingSizeContent(surahName: surahName),
-      DownloadReady(:final fileSizeLabel) =>
-        _ReadyContent(surahName: surahName, fileSizeLabel: fileSizeLabel),
+      DownloadReady() => _ReadyContent(
+          surahName: surahName, state: state as DownloadReady, notice: notice),
       DownloadInProgress() =>
         _ProgressContent(state: state as DownloadInProgress),
       DownloadCompleted() => _CompletedContent(surahName: surahName),
@@ -207,7 +256,7 @@ class _CheckingSizeContent extends StatelessWidget {
         CircularProgressIndicator(color: QuranTokens.brandOf(context)),
         const SizedBox(height: 16),
         Text(
-          'Mengecek ukuran file...',
+          'Memeriksa ruang penyimpanan...',
           style: QuranTokens.poppins(
             TextStyle(fontSize: 14, color: QuranTokens.mutedOf(context)),
           ),
@@ -220,10 +269,12 @@ class _CheckingSizeContent extends StatelessWidget {
 class _ReadyContent extends StatelessWidget {
   const _ReadyContent({
     required this.surahName,
-    required this.fileSizeLabel,
+    required this.state,
+    this.notice,
   });
   final String surahName;
-  final String fileSizeLabel;
+  final DownloadReady state;
+  final String? notice;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +283,8 @@ class _ReadyContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Simpan audio murottal $surahName ke perangkat untuk diputar offline.',
+          '${notice == null ? '' : '$notice '}Simpan audio murottal $surahName '
+          'ke perangkat untuk diputar offline.',
           style: QuranTokens.poppins(
             const TextStyle(fontSize: 14, height: 1.5),
           ),
@@ -240,9 +292,26 @@ class _ReadyContent extends StatelessWidget {
         const SizedBox(height: 16),
         _InfoRow(
           icon: Icons.storage_rounded,
-          label: 'Ukuran file',
-          value: fileSizeLabel,
+          label: 'Perkiraan ukuran',
+          value: state.fileSizeLabel,
         ),
+        if (state.lowSpace) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Ruang penyimpanan tidak cukup. Kosongkan ruang di perangkat, '
+            'lalu coba lagi.',
+            style: QuranTokens.poppins(TextStyle(
+                fontSize: 13, color: QuranTokens.wrongOf(context))),
+          ),
+        ] else if (state.needsMobileConfirm) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Kamu memakai data seluler. Unduhan sebesar ini bisa menghabiskan '
+            'kuota.',
+            style: QuranTokens.poppins(TextStyle(
+                fontSize: 13, color: QuranTokens.wrongOf(context))),
+          ),
+        ],
         const SizedBox(height: 8),
         const _InfoRow(
           icon: Icons.wifi_off_rounded,

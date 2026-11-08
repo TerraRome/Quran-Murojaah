@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:quran/Quran/data/datasources/equran_remote_datasource.dart';
-import 'package:quran/Quran/data/models/surah_audio_model.dart';
-import 'package:quran/Quran/data/models/tafsir_response_model.dart';
+import 'package:quran/Quran/data/datasources/audio_local_datasource.dart';
 import 'package:quran/Quran/murottal/application/murottal_controller.dart';
 import 'package:quran/Quran/murottal/application/qari_store.dart';
 import 'package:quran/Quran/murottal/application/repeat_sequencer.dart';
@@ -31,13 +29,20 @@ class _FakePlayer extends Fake implements AudioPlayer {
   @override
   Duration? get duration => const Duration(seconds: 5);
   @override
+  Future<Duration?> setFilePath(String filePath,
+      {Duration? initialPosition, bool preload = true, dynamic tag}) async {
+    urls.add(filePath);
+    return duration;
+  }
+
+  // Murottal 100% offline: memutar lewat URL adalah kesalahan.
+  @override
   Future<Duration?> setUrl(String url,
       {Map<String, String>? headers,
       Duration? initialPosition,
       bool preload = true,
       dynamic tag}) async {
-    urls.add(url);
-    return duration;
+    throw StateError('setUrl tidak boleh dipakai: $url');
   }
 
   @override
@@ -62,27 +67,22 @@ class _FakePlayer extends Fake implements AudioPlayer {
   }
 }
 
-class _FakeRemote implements EquranRemoteDataSource {
-  @override
-  Future<SurahAudioModel> getSurahAudio(int n) async => SurahAudioModel(
-        nomor: n,
-        audioFull: const {},
-        ayat: [
-          for (var i = 1; i <= 2; i++)
-            AyatAudioModel(nomorAyat: i, audio: {'05': 's$n-a$i'}),
-        ],
-      );
+/// Penyimpanan palsu: semua surah terunduh kecuali yang ada di [missing].
+class _FakeLocal extends Fake implements AudioLocalDataSource {
+  final missing = <int>{};
 
   @override
-  Future<TafsirResponseModel> getTafsir(int n) => throw UnimplementedError();
+  Future<bool> isSurahComplete(String q, int s, int n) async =>
+      !missing.contains(s);
 
   @override
-  Future<Map<int, String>> getTransliterations(int n) =>
-      throw UnimplementedError();
+  Future<String?> getAyatPath(String q, int s, int a) async =>
+      missing.contains(s) ? null : 's$s-a$a';
 }
 
-MurottalController make(_FakePlayer p) => MurottalController(
-      datasource: _FakeRemote(),
+MurottalController make(_FakePlayer p, [_FakeLocal? local]) =>
+    MurottalController(
+      localDataSource: local ?? _FakeLocal(),
       qariStore: QariStore.defaults(),
       player: p,
       surahInfo: (n) => n <= 114 ? (name: 'S$n', totalAyat: 2) : null,
@@ -290,6 +290,42 @@ void main() {
       await complete(p);
       await complete(p);
       expect(c.value, isA<MurottalIdle>());
+    });
+
+    test('putar lewat setFilePath, tidak pernah setUrl', () async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      await c.playAyat(surahNumber: 1, surahName: 'S1', ayatNumber: 2, totalAyat: 2);
+      expect(p.urls, ['s1-a2']);
+      expect(c.value, isA<MurottalPlaying>());
+    });
+
+    test('surah belum diunduh: tidak diputar, minta unduh', () async {
+      final p = _FakePlayer();
+      final local = _FakeLocal()..missing.add(3);
+      final c = make(p, local);
+      await c.prefsLoaded;
+      await c.playAyat(surahNumber: 3, surahName: 'S3', ayatNumber: 1, totalAyat: 2);
+      final s = c.value as MurottalNotDownloaded;
+      expect((s.surahNumber, s.fromAutoNext), (3, false));
+      expect(p.urls, isEmpty);
+      final f = await c.playOnce(
+          surahNumber: 3, surahName: 'S3', ayatNumber: 1, totalAyat: 2);
+      expect(f, isFalse);
+    });
+
+    test('auto-next ke surah belum diunduh: berhenti dengan pesan', () async {
+      final p = _FakePlayer();
+      final local = _FakeLocal()..missing.add(2);
+      final c = make(p, local);
+      await c.prefsLoaded;
+      await c.playFullSurah(surahNumber: 1, surahName: 'S1', totalAyat: 2);
+      await complete(p);
+      await complete(p);
+      final s = c.value as MurottalNotDownloaded;
+      expect((s.surahNumber, s.fromAutoNext), (2, true));
+      expect(p.urls, ['s1-a1', 's1-a2']);
     });
 
     test('ulang aktif mengalahkan auto-next', () async {

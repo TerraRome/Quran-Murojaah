@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:quran/Quran/application/quran_controller.dart';
 import 'package:quran/Quran/data/last_read_store.dart';
+import 'package:quran/Quran/data/datasources/audio_local_datasource.dart';
 import 'package:quran/Quran/domain/entities/surah.dart';
 import 'package:quran/Quran/domain/entities/verse.dart';
 import 'package:quran/Quran/domain/failures/quran_failure.dart';
@@ -48,6 +49,11 @@ class _FlakyService extends ReciteMurojaahService {
       status.value = ReciteMurojaahStatus.ready;
     }
   }
+}
+
+class _NoAudio extends Fake implements AudioLocalDataSource {
+  @override
+  Future<bool> isSurahComplete(String q, int s, int n) async => false;
 }
 
 void main() {
@@ -183,5 +189,35 @@ void main() {
     expect(find.textContaining('Unduhan gagal'), findsNothing);
     expect(find.textContaining('Giliranmu, tirukan'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('surah belum diunduh: tampil ajakan unduh, alur tidak mulai',
+      (tester) async {
+    final surah = Surah(
+      number: 1,
+      name: 'الفاتحة',
+      transliteration: 'Al-Fatihah',
+      translation: 'Pembukaan',
+      revelationType: RevelationType.meccan,
+      totalVerses: 1,
+      verses: const [
+        Verse(number: 1, numberInSurah: 1, arabic: 'بِسْمِ', translation: 't'),
+      ],
+    );
+    await tester.pumpWidget(
+      QuranThemeScope(
+        child: MaterialApp(
+          home: DengarTirukanPage(
+            surahNumber: 1,
+            controller: QuranController(_Repo([surah]), const LastReadStore()),
+            localDataSource: _NoAudio(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Surah ini belum diunduh'), findsOneWidget);
+    expect(find.text('Unduh'), findsOneWidget);
+    expect(find.text('Berhenti'), findsNothing);
   });
 }

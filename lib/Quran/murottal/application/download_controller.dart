@@ -1,5 +1,7 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/datasources/audio_local_datasource.dart';
 
@@ -18,18 +20,36 @@ class DownloadCheckingSize extends DownloadState {
   const DownloadCheckingSize();
 }
 
-/// Siap download — ukuran file sudah diketahui, menunggu konfirmasi user.
+/// Siap download: menunggu konfirmasi user.
 class DownloadReady extends DownloadState {
-  const DownloadReady({required this.fileSizeBytes});
+  const DownloadReady({
+    required this.fileSizeBytes,
+    this.onMobileData = false,
+    this.lowSpace = false,
+  });
+
+  /// Perkiraan ukuran (bukan hasil HEAD), lihat [DownloadController.estimateBytes].
   final int fileSizeBytes;
+  final bool onMobileData;
+
+  /// Ruang kosong tidak cukup: unduhan tidak boleh dimulai.
+  final bool lowSpace;
+
+  /// Data seluler + unduhan besar: perlu peringatan kuota sebelum lanjut.
+  bool get needsMobileConfirm =>
+      onMobileData && fileSizeBytes > DownloadController.mobileWarnBytes;
 
   String get fileSizeLabel {
-    if (fileSizeBytes < 0) return 'Ukuran tidak diketahui';
     if (fileSizeBytes < 1024 * 1024) {
       return '${(fileSizeBytes / 1024).toStringAsFixed(1)} KB';
     }
     return '${(fileSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
+}
+
+/// Ada unduhan format lama (satu file surah) yang tidak bisa diputar lagi.
+class DownloadNeedsRedownload extends DownloadState {
+  const DownloadNeedsRedownload();
 }
 
 /// Sedang dalam proses download.
@@ -73,11 +93,8 @@ class DownloadInProgress extends DownloadState {
     return '${e.inMinutes}m ${e.inSeconds % 60}d';
   }
 
-  /// Format bytes yang sudah diunduh.
-  String get receivedLabel {
-    if (received < 1024 * 1024) return '${(received / 1024).toStringAsFixed(1)} KB';
-    return '${(received / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
+  /// Kemajuan dalam jumlah ayat (received = ayat selesai, total = semua ayat).
+  String get receivedLabel => '$received dari $total ayat';
 }
 
 /// Download selesai — file tersimpan lokal.
@@ -107,90 +124,149 @@ class DownloadError extends DownloadState {
 /// Controller download audio murottal untuk satu surah.
 ///
 /// Satu instance per surah detail page.
-/// State: [DownloadIdle] → [DownloadCheckingSize] → [DownloadReady] →
-///        [DownloadInProgress] → [DownloadCompleted] / [DownloadError]
+/// State: [DownloadIdle] -> [DownloadCheckingSize] -> [DownloadReady] ->
+///        [DownloadInProgress] -> [DownloadCompleted] / [DownloadError]
 class DownloadController extends ValueNotifier<DownloadState> {
-  DownloadController({required AudioLocalDataSource localDataSource})
-      : _local = localDataSource,
+  DownloadController({
+    required AudioLocalDataSource localDataSource,
+    Future<int?> Function()? freeSpace,
+    Future<bool> Function()? onMobileData,
+  })  : _local = localDataSource,
+        _freeSpace = freeSpace ?? _channelFreeSpace,
+        _onMobileData = onMobileData ?? _connectivityIsMobile,
         super(const DownloadIdle());
 
   final AudioLocalDataSource _local;
+  final Future<int?> Function() _freeSpace;
+  final Future<bool> Function() _onMobileData;
   CancelToken? _cancelToken;
 
-  /// Inisialisasi: cek apakah file sudah ada lokal.
-  /// Dipanggil dari initState page.
-  Future<void> checkIfDownloaded(String qariId, int surahNumber) async {
-    final path = await _local.getLocalPath(qariId, surahNumber);
-    if (path != null) {
-      final size = await _local.getTotalStorageUsed();
-      // Ambil ukuran file spesifik ini
-      final info = await _local.listDownloaded();
-      final match = info
-          .where((f) => f.qariId == qariId && f.surahNumber == surahNumber)
-          .firstOrNull;
+  /// Di atas ukuran ini, data seluler butuh konfirmasi (50 MB).
+  static const mobileWarnBytes = 50 * 1024 * 1024;
+
+  // shortcut: rata-rata byte/ayat per qari dari total terukur 6236 ayat
+  // (report R&D 2026-11-08); ukuran asli per surah bisa meleset +-50%,
+  // upgrade ke HEAD per file bila perlu angka pasti.
+  static const _avgBytesPerAyat = {
+    '01': 201 * 1024,
+    '02': 283 * 1024,
+    '03': 296 * 1024,
+    '04': 240 * 1024,
+    '05': 274 * 1024,
+    '06': 239 * 1024,
+  };
+
+  /// Perkiraan ukuran unduhan satu surah.
+  static int estimateBytes(String qariId, int verseCount) =>
+      verseCount * (_avgBytesPerAyat[qariId] ?? 274 * 1024);
+
+  static const _storageChannel = MethodChannel('quran.murojaah/storage');
+
+  /// Ruang kosong (bytes) via kanal native; null = tidak diketahui (cek dilewati).
+  static Future<int?> _channelFreeSpace() async {
+    try {
+      return await _storageChannel.invokeMethod<int>('freeBytes');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> _connectivityIsMobile() async {
+    try {
+      final r = await Connectivity().checkConnectivity();
+      return r.contains(ConnectivityResult.mobile) &&
+          !r.contains(ConnectivityResult.wifi) &&
+          !r.contains(ConnectivityResult.ethernet);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Inisialisasi: cek apakah surah sudah lengkap di lokal.
+  Future<void> checkIfDownloaded(
+      String qariId, int surahNumber, int verseCount) async {
+    if (await _local.isSurahComplete(qariId, surahNumber, verseCount)) {
       value = DownloadCompleted(
-        filePath: path,
-        fileSizeBytes: match?.fileSizeBytes ?? size,
+        filePath: await _local.ayatPath(qariId, surahNumber, 1),
+        fileSizeBytes: await _surahSize(qariId, surahNumber),
       );
+    } else if (await _local.hasLegacy(qariId, surahNumber)) {
+      value = const DownloadNeedsRedownload();
     } else {
       value = const DownloadIdle();
     }
   }
 
-  /// Langkah 1: Ambil ukuran file dari server (HEAD request).
-  /// State berubah ke [DownloadCheckingSize] lalu [DownloadReady].
-  Future<void> checkSize(String url) async {
-    value = const DownloadCheckingSize();
-    final size = await _local.getRemoteFileSize(url);
-    value = DownloadReady(fileSizeBytes: size);
+  Future<int> _surahSize(String qariId, int surahNumber) async {
+    final all = await _local.listDownloaded();
+    return all
+            .where((f) =>
+                f.qariId == qariId && f.surahNumber == surahNumber && !f.isLegacy)
+            .firstOrNull
+            ?.fileSizeBytes ??
+        0;
   }
 
-  /// Langkah 2: Mulai download setelah user konfirmasi.
+  /// Langkah 1: hitung perkiraan ukuran, cek ruang kosong dan jenis jaringan.
+  Future<void> prepare(String qariId, int verseCount) async {
+    value = const DownloadCheckingSize();
+    final size = estimateBytes(qariId, verseCount);
+    final free = await _freeSpace();
+    final mobile = await _onMobileData();
+    value = DownloadReady(
+      fileSizeBytes: size,
+      onMobileData: mobile,
+      // Sisakan 20% untuk file sementara dan sistem.
+      lowSpace: free != null && free < size * 1.2,
+    );
+  }
+
+  /// Langkah 2: mulai download setelah user konfirmasi.
   Future<void> startDownload({
-    required String url,
     required String qariId,
     required int surahNumber,
+    required int verseCount,
   }) async {
+    final ready = value;
+    if (ready is DownloadReady && ready.lowSpace) return;
+
     _cancelToken = CancelToken();
     final startTime = DateTime.now();
-    value = DownloadInProgress(received: 0, total: -1, startTime: startTime);
+    value = DownloadInProgress(received: 0, total: verseCount, startTime: startTime);
 
     try {
-      final path = await _local.download(
-        url: url,
+      await _local.downloadSurah(
         qariId: qariId,
         surahNumber: surahNumber,
+        verseCount: verseCount,
         cancelToken: _cancelToken,
-        onProgress: (received, total) {
+        onProgress: (done, total) {
           if (!(_cancelToken?.isCancelled ?? false)) {
             value = DownloadInProgress(
-              received: received,
-              total: total,
-              startTime: startTime,
-            );
+                received: done, total: total, startTime: startTime);
           }
         },
       );
-      final info = await _local.listDownloaded();
-      final match = info
-          .where((f) => f.qariId == qariId && f.surahNumber == surahNumber)
-          .firstOrNull;
       value = DownloadCompleted(
-        filePath: path,
-        fileSizeBytes: match?.fileSizeBytes ?? 0,
+        filePath: await _local.ayatPath(qariId, surahNumber, 1),
+        fileSizeBytes: await _surahSize(qariId, surahNumber),
       );
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
         value = const DownloadIdle();
       } else {
         debugPrint('[Download] gagal: ${e.message}');
-        value = const DownloadError('Unduhan gagal. Periksa internet, lalu coba lagi.');
+        value = const DownloadError(_failMessage);
       }
     } catch (e) {
       debugPrint('[Download] gagal: $e');
-      value = const DownloadError('Unduhan gagal. Periksa internet, lalu coba lagi.');
+      value = const DownloadError(_failMessage);
     }
   }
+
+  static const _failMessage =
+      'Unduhan gagal. Periksa internet dan ruang penyimpanan, lalu coba lagi. '
+      'Ayat yang sudah terunduh tidak perlu diunduh ulang.';
 
   /// Batalkan download yang sedang berjalan.
   void cancelDownload() {
@@ -198,15 +274,12 @@ class DownloadController extends ValueNotifier<DownloadState> {
     _cancelToken = null;
   }
 
-  /// Set state ke DownloadCheckingSize secara manual (sebelum API call).
-  void setChecking() => value = const DownloadCheckingSize();
-
-  /// Reset ke DownloadIdle (misal saat API call gagal sebelum checkSize).
+  /// Reset ke DownloadIdle.
   void setIdle() => value = const DownloadIdle();
 
   /// Hapus file lokal dan reset ke idle.
   Future<void> deleteDownload(String qariId, int surahNumber) async {
-    await _local.delete(qariId, surahNumber);
+    await _local.deleteSurah(qariId, surahNumber);
     value = const DownloadIdle();
   }
 

@@ -100,7 +100,6 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     _localDataSource = AudioLocalDataSourceImpl();
     _tafsirController = TafsirController(datasource: _remoteDatasource);
     _murottalController = widget.murottalController ?? MurottalController(
-      datasource: _remoteDatasource,
       localDataSource: _localDataSource,
       qariStore: QariStore.defaults(),
       surahInfo: (n) {
@@ -132,6 +131,10 @@ class _SurahDetailPageState extends State<SurahDetailPage>
   /// Auto-scroll ke ayat aktif — baik mode full-surah maupun per-ayat.
   void _onMurottalStateChanged() {
     final state = _murottalController.value;
+    if (state is MurottalNotDownloaded) {
+      _onNotDownloaded(state);
+      return;
+    }
     if (state is! MurottalPlaying) return;
     if (state.surahNumber != _surahNumber) {
       _followSurah(state.surahNumber);
@@ -152,6 +155,25 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     );
   }
 
+  /// Audio hanya dari file lokal: surah belum diunduh -> tawarkan unduh;
+  /// surah berikutnya (lanjut otomatis) belum diunduh -> beri tahu, berhenti.
+  void _onNotDownloaded(MurottalNotDownloaded state) {
+    if (!mounted) return;
+    if (state.fromAutoNext) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Surah berikutnya belum diunduh. Murottal berhenti.',
+            style: QuranTokens.poppins(const TextStyle(fontSize: 13)),
+          ),
+        ),
+      );
+      return;
+    }
+    if (state.surahNumber != _surahNumber) return;
+    unawaited(_runDownloadDialog(notice: 'Surah ini belum diunduh.'));
+  }
+
   /// Murottal pindah ke surah lain (lanjut otomatis): muat surah itu di halaman
   /// yang sama supaya controller (dan audio) tidak ikut dibuang.
   void _followSurah(int number) {
@@ -160,7 +182,8 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     _surahNumber = number;
     _lastScrolledAyat = 0;
     _load(followed: true);
-    unawaited(_downloadController.checkIfDownloaded(_activeQari.id, number));
+    unawaited(_downloadController.checkIfDownloaded(
+        _activeQari.id, number, _verseCountOf(number)));
   }
 
   /// Update qari controller setelah SharedPreferences siap,
@@ -174,8 +197,16 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     await _downloadController.checkIfDownloaded(
       _activeQari.id,
       _surahNumber,
+      _verseCountOf(_surahNumber),
     );
   }
+
+  int _verseCountOf(int number) =>
+      widget.controller.surahs
+          .where((s) => s.number == number)
+          .firstOrNull
+          ?.totalVerses ??
+      0;
 
   @override
   void dispose() {
@@ -460,57 +491,31 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       return;
     }
 
-    // Idle/error → set loading state segera, lalu ambil URL audio
-    // Set DownloadCheckingSize dulu agar tombol tampil spinner sebelum API call
-    _downloadController.setChecking();
-    String? audioUrl;
-    try {
-      final audioModel =
-          await _remoteDatasource.getSurahAudio(surah.number);
-      audioUrl = audioModel.audioFull[_activeQari.id];
-    } catch (_) {
-      _downloadController.setIdle();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Gagal mengambil informasi audio.',
-            style: QuranTokens.poppins(
-              TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onError,
-              ),
-            ),
-          ),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
+    await _runDownloadDialog();
+  }
 
-    if (audioUrl == null) {
-      _downloadController.setIdle();
-      return;
-    }
-
-    // Cek storage — HEAD request untuk ukuran
-    await _downloadController.checkSize(audioUrl);
-    if (!mounted) return;
-
-    // Tampilkan dialog
-    final url = audioUrl;
-    await DownloadProgressDialog.show(
+  /// Dialog konfirmasi + progress unduh seluruh ayat surah yang tampil.
+  Future<void> _runDownloadDialog({String? notice}) async {
+    final surah = _surah;
+    if (surah == null) return;
+    final dl = _downloadController.value;
+    if (dl is DownloadInProgress || dl is DownloadCheckingSize) return;
+    await DownloadProgressDialog.run(
       context: context,
       controller: _downloadController,
+      qariId: _activeQari.id,
+      surahNumber: surah.number,
+      verseCount: surah.totalVerses,
       surahName: surah.transliteration,
-      onConfirm: () {
-        _downloadController.startDownload(
-          url: url,
-          qariId: _activeQari.id,
-          surahNumber: surah.number,
-        );
-      },
+      notice: dl is DownloadNeedsRedownload
+          ? 'Unduhan lama perlu diperbarui.'
+          : notice,
     );
+    // Dialog ditutup tanpa selesai (batal/gagal): kembali ke status sebenarnya.
+    if (mounted && _downloadController.value is! DownloadCompleted) {
+      await _downloadController.checkIfDownloaded(
+          _activeQari.id, surah.number, surah.totalVerses);
+    }
   }
 
   @override

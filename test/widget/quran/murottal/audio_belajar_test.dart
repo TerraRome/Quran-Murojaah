@@ -187,6 +187,50 @@ void main() {
       expect(p.seeks, 1);
     });
 
+    testWidgets('BL-04-1: gapRemaining menghitung mundur lalu hilang',
+        (tester) async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 3, gapSeconds: 2));
+      await c.playAyat(surahNumber: 1, surahName: 'S1', ayatNumber: 1, totalAyat: 2);
+      expect(c.gapRemaining.value, isNull);
+      p.complete();
+      await tester.pump();
+      expect(c.gapRemaining.value, 2);
+      await tester.pump(const Duration(seconds: 1));
+      expect(c.gapRemaining.value, 1);
+      expect(p.seeks, 0);
+      await tester.pump(const Duration(seconds: 1));
+      expect(c.gapRemaining.value, isNull);
+      expect(p.seeks, 1);
+    });
+
+    testWidgets('BL-04-1: skipGap langsung ke ulangan berikutnya; pause membersihkan',
+        (tester) async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 3, gapSeconds: 5));
+      await c.playAyat(surahNumber: 1, surahName: 'S1', ayatNumber: 1, totalAyat: 2);
+      p.complete();
+      await tester.pump();
+      c.skipGap();
+      await tester.pump();
+      expect(c.gapRemaining.value, isNull);
+      expect(p.seeks, 1);
+      c.skipGap(); // tanpa jeda: tidak berbuat apa-apa
+      expect(p.seeks, 1);
+
+      p.complete();
+      await tester.pump();
+      expect(c.gapRemaining.value, 5);
+      await c.pause();
+      expect(c.gapRemaining.value, isNull);
+    });
+
     test('rentang 1..2 x2 memutar ulang dari awal', () async {
       final p = _FakePlayer();
       final c = make(p);
@@ -255,6 +299,24 @@ void main() {
       await tester.pump();
       expect(find.text('1.25×'), findsOneWidget);
       expect(c.speed.value, 1.25);
+    });
+
+    testWidgets('BL-04-1: saat jeda tampil "Jeda… N" dan tombol Lewati jeda',
+        (tester) async {
+      final (c, p) = await pumpPlayer(tester);
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 3, gapSeconds: 5));
+      p.complete();
+      await tester.pump();
+      expect(find.text('Jeda… 5'), findsOneWidget);
+      expect(find.byTooltip('Lewati jeda'), findsOneWidget);
+      expect(find.bySemanticsLabel('Jeda 5 detik sebelum ulangan berikutnya'),
+          findsOneWidget);
+      await tester.tap(find.byTooltip('Lewati jeda'));
+      await tester.pump();
+      expect(find.textContaining('Jeda…'), findsNothing);
+      expect(find.byTooltip('Jeda'), findsOneWidget);
+      expect(p.seeks, 1);
     });
 
     testWidgets('tombol ulang membuka sheet dan mengubah mode', (tester) async {

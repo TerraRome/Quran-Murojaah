@@ -189,6 +189,43 @@ class _MiniPlayerContent extends StatelessWidget {
                 ],
               ),
 
+              // Jeda antar ulangan (BL-04-1): hitung mundur menggantikan seek bar
+              ValueListenableBuilder<int?>(
+                valueListenable: controller.gapRemaining,
+                builder: (context, gap, _) {
+                  if (gap == null || !isPlaying) return const SizedBox.shrink();
+                  return Semantics(
+                    liveRegion: true,
+                    excludeSemantics: true,
+                    label: 'Jeda $gap detik sebelum ulangan berikutnya',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: QuranTokens.brandColor(dark),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Jeda… $gap',
+                            style: QuranTokens.poppins(
+                                    const TextStyle(fontSize: 12))
+                                .copyWith(
+                                    color: QuranTokens.secondaryColor(dark)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+
               // Seek bar
               if (!isLoading && duration > Duration.zero) ...[
                 const SizedBox(height: 4),
@@ -282,16 +319,27 @@ class _MiniPlayerContent extends StatelessWidget {
                       ),
                     )
                   else
-                    IconButton(
-                      tooltip: isPlaying ? 'Jeda' : 'Putar',
-                      onPressed: isPlaying ? controller.pause : controller.resume,
-                      icon: Icon(
-                        isPlaying
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.play_circle_filled_rounded,
-                        color: QuranTokens.brandColor(dark),
-                        size: 44,
-                      ),
+                    ValueListenableBuilder<int?>(
+                      valueListenable: controller.gapRemaining,
+                      builder: (context, gap, _) {
+                        final inGap = gap != null && isPlaying;
+                        return IconButton(
+                          tooltip:
+                              inGap ? 'Lewati jeda' : (isPlaying ? 'Jeda' : 'Putar'),
+                          onPressed: inGap
+                              ? controller.skipGap
+                              : (isPlaying ? controller.pause : controller.resume),
+                          icon: Icon(
+                            inGap
+                                ? Icons.skip_next_rounded
+                                : (isPlaying
+                                    ? Icons.pause_circle_filled_rounded
+                                    : Icons.play_circle_filled_rounded),
+                            color: QuranTokens.brandColor(dark),
+                            size: 44,
+                          ),
+                        );
+                      },
                     ),
 
                   // Next ayat (hanya mode per-ayat)

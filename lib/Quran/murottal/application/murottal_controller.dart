@@ -146,6 +146,9 @@ class MurottalController extends ValueNotifier<MurottalState> {
 
   Timer? _gapTimer;
 
+  /// Sisa detik jeda antar ulangan (BL-04-1); null bila tidak sedang jeda.
+  final ValueNotifier<int?> gapRemaining = ValueNotifier(null);
+
   /// Menunggu satu ayat selesai diputar ([playOnce], BL-08).
   Completer<bool>? _once;
 
@@ -197,9 +200,22 @@ class MurottalController extends ValueNotifier<MurottalState> {
   }
 
   void _cancelGap() {
+    _stopGapTimer();
+    _pending = null;
+  }
+
+  void _stopGapTimer() {
     _gapTimer?.cancel();
     _gapTimer = null;
-    _pending = null;
+    gapRemaining.value = null;
+  }
+
+  /// Lewati jeda antar ulangan dan langsung putar ulangan berikutnya.
+  void skipGap() {
+    final run = _pending;
+    if (run == null || _gapTimer == null) return;
+    _cancelGap();
+    run();
   }
 
   final EquranRemoteDataSource _datasource;
@@ -290,7 +306,15 @@ class MurottalController extends ValueNotifier<MurottalState> {
           run();
         } else {
           _pending = run;
-          _gapTimer = Timer(gap, () {
+          var left = (gap.inMilliseconds / 1000).ceil();
+          gapRemaining.value = left;
+          _gapTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+            left--;
+            if (left > 0) {
+              gapRemaining.value = left;
+              return;
+            }
+            _stopGapTimer();
             _pending = null;
             run();
           });
@@ -428,8 +452,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   Future<void> pause() async {
     final current = value;
     if (current is! MurottalPlaying) return;
-    _gapTimer?.cancel();
-    _gapTimer = null;
+    _stopGapTimer();
     await _player.pause();
     value = MurottalPaused(
       surahNumber: current.surahNumber,
@@ -532,6 +555,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   void dispose() {
     _gapTimer?.cancel();
     _finishOnce(false);
+    gapRemaining.dispose();
     speed.dispose();
     repeat.dispose();
     _player.dispose();

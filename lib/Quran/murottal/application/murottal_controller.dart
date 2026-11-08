@@ -137,7 +137,8 @@ class MurottalController extends ValueNotifier<MurottalState> {
   /// Kecepatan putar (BL-01), diingat antar sesi.
   final ValueNotifier<double> speed = ValueNotifier(1.0);
 
-  /// Pengaturan ulang & jeda (BL-02..BL-04). Tidak disimpan antar sesi.
+  /// Pengaturan ulang & jeda (BL-02..BL-04). Mode, jumlah, jeda disimpan;
+  /// rentang ayat tidak (spesifik per surah).
   final ValueNotifier<RepeatSettings> repeat =
       ValueNotifier(const RepeatSettings());
 
@@ -161,6 +162,14 @@ class MurottalController extends ValueNotifier<MurottalState> {
   Future<void> _loadPrefs() async {
     speed.value = await _prefsStore.loadSpeed();
     autoNextSurah = await _prefsStore.loadAutoNext();
+    final saved = await _prefsStore.loadRepeat();
+    // Jangan timpa bila pengguna sudah mengubah pengaturan sebelum prefs termuat.
+    if (repeat.value == const RepeatSettings()) {
+      repeat.value = saved;
+      _sequencer
+        ..settings = saved
+        ..reset();
+    }
     await _applySpeed();
   }
 
@@ -185,6 +194,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
       ..settings = s
       ..reset();
     repeat.value = s;
+    _prefsStore.saveRepeat(s);
     // Jeda yang dibatalkan tadi satu-satunya penyambung ke ulangan berikutnya;
     // tanpa ini player berhenti di ujung ayat. Bila sedang di-pause, resume()
     // yang melanjutkan.

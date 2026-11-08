@@ -109,6 +109,36 @@ void main() {
       expect(c2.speed.value, 0.75);
     });
 
+    test('pengaturan ulang disimpan permanen; rentang tidak (BL-04-5)', () async {
+      final c = make(_FakePlayer());
+      await c.prefsLoaded;
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 5, gapSeconds: 2));
+      await pumpEventQueue();
+      final c2 = make(_FakePlayer());
+      await c2.prefsLoaded;
+      expect(c2.repeat.value,
+          const RepeatSettings(mode: RepeatKind.ayat, count: 5, gapSeconds: 2));
+
+      c2.setRepeat(const RepeatSettings(
+          mode: RepeatKind.range, count: 3, rangeStart: 2, rangeEnd: 2, gapSeconds: 5));
+      await pumpEventQueue();
+      final c3 = make(_FakePlayer());
+      await c3.prefsLoaded;
+      // Mode rentang dimuat sebagai mati; jumlah & jeda tetap.
+      expect(c3.repeat.value.mode, RepeatKind.off);
+      expect(c3.repeat.value.gapSeconds, 5);
+      expect(c3.repeat.value.rangeStart, 1);
+    });
+
+    test('jeda tersimpan terbaca setelah prefsLoaded (Dengar-Tirukan, BL-08-7)',
+        () async {
+      SharedPreferences.setMockInitialValues({'murottal_repeat_gap': 5});
+      final c = make(_FakePlayer());
+      await c.prefsLoaded;
+      expect(c.repeat.value.gapSeconds, 5);
+    });
+
     test('kecepatan diterapkan saat memutar ayat', () async {
       SharedPreferences.setMockInitialValues({'murottal_speed': 0.5});
       final p = _FakePlayer();

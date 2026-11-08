@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:recite_quran/recite_quran.dart';
 
 import 'recite_session_engine.dart';
@@ -15,6 +16,28 @@ const _examConfig = TrackerConfig(
   enableAutoReanchor: false, // ignore: avoid_redundant_argument_values
   reanchorStallThreshold: 24, // ignore: avoid_redundant_argument_values
 );
+
+/// Model ASR lewat asset API GitHub. URL bawaan paket (releases/download/...)
+/// dan URL browser repo baru sama-sama 504; asset API hidup, tetapi hanya
+/// mengirim biner bila header `Accept: application/octet-stream` ada.
+const _modelUrl =
+    'https://api.github.com/repos/Recite-Quran/Natlu/releases/assets/521426715';
+
+/// Menambah `Accept: application/octet-stream` ke tiap permintaan.
+class AcceptOctetStreamClient extends http.BaseClient {
+  AcceptOctetStreamClient([http.Client? inner]) : _inner = inner ?? http.Client();
+
+  final http.Client _inner;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers['Accept'] = 'application/octet-stream';
+    return _inner.send(request);
+  }
+
+  @override
+  void close() => _inner.close();
+}
 
 /// Thin facade over `recite_quran` for a single surah: loads the surah,
 /// ensures the ASR model exists, and pipes microphone audio into the tracker.
@@ -98,12 +121,19 @@ class ReciteMurojaahService implements ReciteSessionEngine {
         return words.length == v.uthmaniWords.length ? words : v.uthmaniWords;
       }
 
-      final downloader = ModelDownloader();
+      final downloader = ModelDownloader(modelUrl: _modelUrl);
       if (!await downloader.isModelReady()) {
         _setStatus(ReciteMurojaahStatus.downloadingModel);
-        final ok = await downloader.downloadAssets(
-          onProgress: (p, _) => downloadProgress.value = p,
-        );
+        final client = AcceptOctetStreamClient();
+        final bool ok;
+        try {
+          ok = await downloader.downloadAssets(
+            onProgress: (p, _) => downloadProgress.value = p,
+            client: client,
+          );
+        } finally {
+          client.close();
+        }
         if (!ok) {
           _fail('Unduhan gagal. Periksa internet, lalu coba lagi.');
           return;

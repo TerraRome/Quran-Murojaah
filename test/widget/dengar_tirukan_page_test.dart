@@ -9,6 +9,7 @@ import 'package:quran/Quran/domain/entities/surah.dart';
 import 'package:quran/Quran/domain/entities/verse.dart';
 import 'package:quran/Quran/domain/failures/quran_failure.dart';
 import 'package:quran/Quran/domain/repositories/quran_repository.dart';
+import 'package:quran/Quran/murojaah/recite/recite_murojaah_service.dart';
 import 'package:quran/Quran/murojaah/tirukan/dengar_tirukan_flow.dart';
 import 'package:quran/Quran/murojaah/tirukan/dengar_tirukan_page.dart';
 import 'package:quran/Quran/presentation/widgets/quran_theme_scope.dart';
@@ -31,6 +32,22 @@ class _Rec implements AyatRecognizer {
   Future<bool?> listen(int ayat) => done.future;
   @override
   Future<void> cancel() async {}
+}
+
+/// Mesin palsu: initialize() pertama gagal, berikutnya berhasil.
+class _FlakyService extends ReciteMurojaahService {
+  _FlakyService() : super(surahNumber: 1);
+  int calls = 0;
+  @override
+  Future<void> initialize() async {
+    calls++;
+    if (calls == 1) {
+      errorMessage.value = 'Unduhan gagal. Periksa internet, lalu coba lagi.';
+      status.value = ReciteMurojaahStatus.error;
+    } else {
+      status.value = ReciteMurojaahStatus.ready;
+    }
+  }
 }
 
 void main() {
@@ -110,4 +127,61 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('persiapan gagal: Coba lagi menjalankan ulang dan memulai alur', (
+    tester,
+  ) async {
+    final surah = Surah(
+      number: 1,
+      name: 'الفاتحة',
+      transliteration: 'Al-Fatihah',
+      translation: 'Pembukaan',
+      revelationType: RevelationType.meccan,
+      totalVerses: 1,
+      verses: const [
+        Verse(
+          number: 1,
+          numberInSurah: 1,
+          arabic: 'بِسْمِ اللَّهِ',
+          translation: 'Dengan menyebut nama Allah.',
+        ),
+      ],
+    );
+    final service = _FlakyService();
+    final controller = QuranController(_Repo([surah]), const LastReadStore());
+    await tester.pumpWidget(
+      QuranThemeScope(
+        child: MaterialApp(
+          home: DengarTirukanPage(
+            surahNumber: 1,
+            controller: controller,
+            serviceBuilder: (_) => service,
+            flowBuilder: (s) => DengarTirukanFlow(
+              totalAyat: s.totalVerses,
+              recognizer: _Rec(),
+              gap: () => Duration.zero,
+              stopAudio: () async {},
+              playAyat: (_) async => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Unduhan gagal'), findsOneWidget);
+    expect(find.text('Coba lagi'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(FilledButton)).height,
+      greaterThanOrEqualTo(48),
+    );
+
+    await tester.tap(find.text('Coba lagi'));
+    await tester.pumpAndSettle();
+
+    expect(service.calls, 2);
+    expect(find.textContaining('Unduhan gagal'), findsNothing);
+    expect(find.textContaining('Giliranmu, tirukan'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -101,6 +101,39 @@ void main() {
     expect(find.bySemanticsLabel('Simpan ayat 1'), findsOneWidget);
   });
 
+  testWidgets('snackbar hilang sendiri dan tertutup saat simpan dibatalkan',
+      (tester) async {
+    final bookmarks = BookmarkController();
+    await tester.pumpWidget(
+      QuranThemeScope(
+        child: MaterialApp(
+          home: SurahDetailPage(
+            surahNumber: 1,
+            controller: await _loaded(),
+            bookmarks: bookmarks,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Batal lewat ikon: snackbar "Ayat disimpan" ikut tertutup.
+    await tester.tap(find.bySemanticsLabel('Simpan ayat 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ayat disimpan'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Hapus simpanan ayat 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ayat disimpan'), findsNothing);
+
+    // Dibiarkan: snackbar hilang setelah durasi default.
+    await tester.tap(find.bySemanticsLabel('Simpan ayat 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ayat disimpan'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Ayat disimpan'), findsNothing);
+  });
+
   testWidgets('initialAyat men-scroll ke ayat tujuan', (tester) async {
     await tester.pumpWidget(
       QuranThemeScope(

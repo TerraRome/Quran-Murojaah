@@ -284,12 +284,15 @@ class _SurahDetailPageState extends State<SurahDetailPage>
     final surah = _surah;
     if (bookmarks == null || surah == null) return;
     final saved = await bookmarks.toggle(surah.number, ayatNumber);
-    if (!saved || !mounted) return;
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
+    if (!saved) return;
     messenger.showSnackBar(
       SnackBar(
         content: const Text('Ayat disimpan'),
+        // Snackbar bertombol aksi defaultnya tidak hilang sendiri.
+        persist: false,
         action: SnackBarAction(
           label: 'Batal',
           onPressed: () => bookmarks.remove(surah.number, ayatNumber),

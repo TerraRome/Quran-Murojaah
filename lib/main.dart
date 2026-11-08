@@ -1,13 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'Quran/application/quran_dependencies.dart';
 import 'Quran/quran_app.dart';
 import 'Quran/shalat/application/notification_service.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Marionette: agent AI bisa mengendalikan app saat debug (QA via MCP).
+  if (kDebugMode) {
+    MarionetteBinding.ensureInitialized();
+  } else {
+    WidgetsFlutterBinding.ensureInitialized();
+  }
 
   // Prefetch transliteration semua surah di background — tidak blocking UI.
   unawaited(QuranDependencies.transliterationService.prefetchAll());

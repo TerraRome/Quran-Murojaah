@@ -34,6 +34,8 @@ analyzer:
     - "**/*.config.dart"
     - "build/**"
     - "test/**"
+    - android/**
+    - ios/**
 
   errors:
     invalid_annotation_target: ignore

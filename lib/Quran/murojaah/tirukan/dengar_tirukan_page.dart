@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/quran_controller.dart';
-import '../../data/datasources/equran_remote_datasource.dart';
+import '../../data/datasources/audio_local_datasource.dart';
 import '../../data/quran_tokens.dart';
 import '../../domain/entities/surah.dart';
+import '../../murottal/application/download_controller.dart';
 import '../../murottal/application/murottal_controller.dart';
 import '../../murottal/application/qari_store.dart';
+import '../../murottal/presentation/widgets/download_progress_dialog.dart';
 import '../../presentation/widgets/quran_status_bar.dart';
 import '../../presentation/widgets/quran_theme_scope.dart';
 import '../../presentation/widgets/verse_view.dart';
@@ -24,6 +27,7 @@ class DengarTirukanPage extends StatefulWidget {
     required this.controller,
     @visibleForTesting this.flowBuilder,
     @visibleForTesting this.serviceBuilder,
+    @visibleForTesting this.localDataSource,
   });
 
   final int surahNumber;
@@ -35,6 +39,9 @@ class DengarTirukanPage extends StatefulWidget {
   /// Pengganti mesin murojaah (test); bila diisi, `initialize()`-nya dijalankan
   /// dan galatnya ditampilkan seperti produksi.
   final ReciteMurojaahService Function(int surahNumber)? serviceBuilder;
+
+  /// Pengganti penyimpanan audio lokal (test).
+  final AudioLocalDataSource? localDataSource;
 
   @override
   State<DengarTirukanPage> createState() => _DengarTirukanPageState();
@@ -50,6 +57,14 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
   ReciteMurojaahService? _service;
   ReciteSessionController? _session;
   MurottalController? _murottal;
+
+  // Audio hanya dari file lokal: surah harus sudah diunduh sebelum alur mulai.
+  late final AudioLocalDataSource _local =
+      widget.localDataSource ?? AudioLocalDataSourceImpl();
+  late final DownloadController _download =
+      DownloadController(localDataSource: _local);
+  QariStore _qariStore = QariStore.defaults();
+  bool _needsDownload = false;
 
   @override
   void initState() {
@@ -74,6 +89,19 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     unawaited(_loadLatin());
     final build = widget.flowBuilder;
     final makeService = widget.serviceBuilder;
+    if (build == null) {
+      _qariStore = QariStore(await SharedPreferences.getInstance());
+      final ok = await _local.isSurahComplete(
+          _qariStore.getSelectedQari().id, surah.number, surah.totalVerses);
+      if (!mounted) return;
+      if (!ok) {
+        setState(() {
+          _needsDownload = true;
+          _preparing = false;
+        });
+        return;
+      }
+    }
     if (build != null && makeService == null) {
       _flow = build(surah);
     } else {
@@ -85,8 +113,8 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
         _flow = build(surah);
       } else {
         final murottal = _murottal = MurottalController(
-          datasource: EquranRemoteDataSourceImpl(),
-          qariStore: QariStore.defaults(),
+          localDataSource: _local,
+          qariStore: _qariStore,
         );
         await murottal.prefsLoaded;
         _flow = DengarTirukanFlow(
@@ -106,6 +134,27 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     }
     setState(() => _preparing = false);
     unawaited(_flow!.start());
+  }
+
+  /// Dipicu pengguna: unduh audio surah, lalu mulai alur dari awal.
+  Future<void> _downloadAudio() async {
+    final surah = _surah;
+    if (surah == null) return;
+    await DownloadProgressDialog.run(
+      context: context,
+      controller: _download,
+      qariId: _qariStore.getSelectedQari().id,
+      surahNumber: surah.number,
+      verseCount: surah.totalVerses,
+      surahName: surah.transliteration,
+      notice: 'Surah ini belum diunduh.',
+    );
+    if (!mounted || _download.value is! DownloadCompleted) return;
+    setState(() {
+      _needsDownload = false;
+      _preparing = true;
+    });
+    unawaited(_setup());
   }
 
   /// Siapkan mesin/unduh model. Gagal: tampilkan sebabnya, jangan mulai alur
@@ -156,6 +205,7 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
       session?.dispose();
       unawaited(service?.dispose());
       murottal?.dispose();
+      _download.dispose();
     });
     super.dispose();
   }
@@ -223,6 +273,29 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     final flow = _flow;
     final surah = _surah;
     if (_notFound) return const Center(child: Text('Surah tidak ditemukan'));
+    if (_needsDownload) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Surah ini belum diunduh. Unduh dulu agar bisa dipakai tanpa internet.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => unawaited(_downloadAudio()),
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Unduh'),
+                style: _buttonStyle(dark),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final setupError = _setupError;
     if (setupError != null) {
       return Center(

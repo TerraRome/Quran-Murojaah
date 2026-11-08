@@ -1,21 +1,34 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Informasi file audio yang tersimpan lokal.
+import '../../domain/entities/qari.dart';
+
+/// Ringkasan satu surah yang tersimpan lokal untuk satu qari.
 class LocalAudioInfo {
   const LocalAudioInfo({
     required this.filePath,
     required this.fileSizeBytes,
     required this.qariId,
     required this.surahNumber,
+    this.fileCount = 0,
+    this.isLegacy = false,
   });
 
+  /// Folder surah (layout baru) atau file `NNN.mp3` (layout lama).
   final String filePath;
   final int fileSizeBytes;
   final String qariId;
   final int surahNumber;
+
+  /// Jumlah file ayat yang ada (0 untuk layout lama).
+  final int fileCount;
+
+  /// True bila ini file surah utuh lama (`NNN.mp3`): tidak bisa diputar,
+  /// perlu diunduh ulang per ayat.
+  final bool isLegacy;
 
   /// Format ukuran file ke string yang mudah dibaca (mis. "4.2 MB").
   String get fileSizeLabel {
@@ -26,190 +39,239 @@ class LocalAudioInfo {
   }
 }
 
-/// Callback progress download: received bytes, total bytes (-1 jika tidak diketahui).
-typedef DownloadProgressCallback = void Function(int received, int total);
+/// Progress unduh surah: ayat selesai, total ayat.
+typedef DownloadProgressCallback = void Function(int done, int total);
 
-/// Data source untuk operasi file audio lokal.
+/// Mengunduh satu URL ke [path]. Dipisah supaya bisa diganti di test.
+typedef FileFetcher = Future<void> Function(
+    String url, String path, CancelToken? cancelToken);
+
+/// Data source audio murottal lokal, per ayat.
 ///
-/// Semua file disimpan di:
-/// `{appDocDir}/murottal/{qariId}/{surahNumber padded 3 digit}.mp3`
+/// Layout: `{appDocDir}/murottal/{qariId}/{SSS}/{AAA}.mp3`.
+/// Layout lama (satu file surah): `murottal/{qariId}/{SSS}.mp3`.
 abstract class AudioLocalDataSource {
-  /// Cek apakah file sudah ada di lokal untuk qari dan surah tertentu.
-  Future<bool> isDownloaded(String qariId, int surahNumber);
+  /// Path file satu ayat (belum tentu ada).
+  Future<String> ayatPath(String qariId, int surahNumber, int ayatNumber);
 
-  /// Ambil path file lokal. Kembalikan null jika belum ada.
-  Future<String?> getLocalPath(String qariId, int surahNumber);
+  /// Path file ayat bila ada dan tidak kosong, selain itu null.
+  Future<String?> getAyatPath(String qariId, int surahNumber, int ayatNumber);
 
-  /// Ambil ukuran file remote via HEAD request (Content-Length).
-  /// Kembalikan -1 jika server tidak mengembalikan Content-Length.
-  Future<int> getRemoteFileSize(String url);
+  /// Surah dianggap terunduh bila SEMUA ayat ada dan tidak kosong.
+  Future<bool> isSurahComplete(String qariId, int surahNumber, int verseCount);
 
-  /// Download file dari [url] dan simpan lokal.
-  /// Progress dilaporkan via [onProgress].
-  Future<String> download({
-    required String url,
+  /// Ada file surah utuh format lama yang perlu diunduh ulang.
+  Future<bool> hasLegacy(String qariId, int surahNumber);
+
+  /// Unduh semua ayat surah. Ayat yang sudah ada dilewati (resume).
+  /// Setelah sukses, file lama `NNN.mp3` dihapus.
+  Future<void> downloadSurah({
     required String qariId,
     required int surahNumber,
+    required int verseCount,
     DownloadProgressCallback? onProgress,
     CancelToken? cancelToken,
   });
 
-  /// Hapus file lokal untuk qari dan surah tertentu.
-  Future<void> delete(String qariId, int surahNumber);
+  /// Hapus audio surah (layout baru dan lama) untuk satu qari.
+  Future<void> deleteSurah(String qariId, int surahNumber);
 
-  /// Hapus semua file lokal untuk semua qari dan surah.
+  /// Hapus semua audio untuk semua qari.
   Future<void> deleteAll();
 
-  /// Daftar semua file yang sudah didownload.
+  /// Semua surah tersimpan (baru dan lama), terurut qari lalu surah.
   Future<List<LocalAudioInfo>> listDownloaded();
 
-  /// Total ukuran semua file yang tersimpan lokal (bytes).
+  /// Total ukuran semua file tersimpan (bytes).
   Future<int> getTotalStorageUsed();
 }
 
 class AudioLocalDataSourceImpl implements AudioLocalDataSource {
-  AudioLocalDataSourceImpl({Dio? dio}) : _dio = dio ?? _buildDio();
+  AudioLocalDataSourceImpl({
+    Dio? dio,
+    Future<Directory> Function()? baseDir,
+    FileFetcher? fetcher,
+  })  : _baseDir = baseDir ?? getApplicationDocumentsDirectory,
+        _fetch = fetcher ?? _dioFetcher(dio ?? _buildDio());
 
-  final Dio _dio;
+  final Future<Directory> Function() _baseDir;
+  final FileFetcher _fetch;
+
+  /// Jumlah unduhan paralel. Sengaja kecil: CDN equran.id tidak punya cache
+  /// edge (cf-cache-status: DYNAMIC), jadi tiap request sampai ke origin.
+  static const parallel = 4;
 
   static Dio _buildDio() => Dio(
         BaseOptions(
           connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(minutes: 10),
+          receiveTimeout: const Duration(minutes: 2),
         ),
       );
 
-  /// Bangun path direktori untuk satu qari.
-  Future<Directory> _qariDir(String qariId) async {
-    final base = await getApplicationDocumentsDirectory();
-    final dir = Directory('${base.path}/murottal/$qariId');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
-  }
+  static FileFetcher _dioFetcher(Dio dio) => (url, path, cancelToken) async {
+        await dio.download(
+          url,
+          path,
+          cancelToken: cancelToken,
+          options: Options(
+            followRedirects: true,
+            validateStatus: (s) => s != null && s < 400,
+          ),
+        );
+      };
 
-  /// Nama file: surahNumber zero-padded 3 digit, mis. "001.mp3".
-  String _fileName(int surahNumber) =>
-      '${surahNumber.toString().padLeft(3, '0')}.mp3';
+  /// URL audio satu ayat di CDN equran.id.
+  static String ayatUrl(Qari qari, int surahNumber, int ayatNumber) =>
+      'https://cdn.equran.id/audio-partial/${qari.slug}/'
+      '${_pad(surahNumber)}${_pad(ayatNumber)}.mp3';
 
-  /// Path lengkap file lokal.
-  Future<String> _filePath(String qariId, int surahNumber) async {
-    final dir = await _qariDir(qariId);
-    return '${dir.path}/${_fileName(surahNumber)}';
+  static String _pad(int n) => n.toString().padLeft(3, '0');
+
+  Future<String> _murottalPath() async =>
+      '${(await _baseDir()).path}/murottal';
+
+  Future<Directory> _surahDir(String qariId, int surahNumber) async =>
+      Directory('${await _murottalPath()}/$qariId/${_pad(surahNumber)}');
+
+  Future<File> _legacyFile(String qariId, int surahNumber) async =>
+      File('${await _murottalPath()}/$qariId/${_pad(surahNumber)}.mp3');
+
+  @override
+  Future<String> ayatPath(
+          String qariId, int surahNumber, int ayatNumber) async =>
+      '${(await _surahDir(qariId, surahNumber)).path}/${_pad(ayatNumber)}.mp3';
+
+  @override
+  Future<String?> getAyatPath(
+      String qariId, int surahNumber, int ayatNumber) async {
+    final path = await ayatPath(qariId, surahNumber, ayatNumber);
+    final f = File(path);
+    return await f.exists() && await f.length() > 0 ? path : null;
   }
 
   @override
-  Future<bool> isDownloaded(String qariId, int surahNumber) async {
-    final path = await _filePath(qariId, surahNumber);
-    return File(path).exists();
-  }
-
-  @override
-  Future<String?> getLocalPath(String qariId, int surahNumber) async {
-    final path = await _filePath(qariId, surahNumber);
-    final file = File(path);
-    if (await file.exists()) return path;
-    return null;
-  }
-
-  @override
-  Future<int> getRemoteFileSize(String url) async {
-    try {
-      final response = await _dio.head<dynamic>(
-        url,
-        options: Options(
-          followRedirects: true,
-          validateStatus: (status) => status != null && status < 400,
-        ),
-      );
-      final contentLength = response.headers.value('content-length');
-      if (contentLength != null) {
-        return int.tryParse(contentLength) ?? -1;
-      }
-      return -1;
-    } catch (_) {
-      return -1;
+  Future<bool> isSurahComplete(
+      String qariId, int surahNumber, int verseCount) async {
+    if (verseCount <= 0) return false;
+    for (var a = 1; a <= verseCount; a++) {
+      if (await getAyatPath(qariId, surahNumber, a) == null) return false;
     }
+    return true;
   }
 
   @override
-  Future<String> download({
-    required String url,
+  Future<bool> hasLegacy(String qariId, int surahNumber) async =>
+      (await _legacyFile(qariId, surahNumber)).exists();
+
+  @override
+  Future<void> downloadSurah({
     required String qariId,
     required int surahNumber,
+    required int verseCount,
     DownloadProgressCallback? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final path = await _filePath(qariId, surahNumber);
-    final tempPath = '$path.tmp';
+    final qari = Qari.fromId(qariId);
+    final dir = await _surahDir(qariId, surahNumber);
+    if (!await dir.exists()) await dir.create(recursive: true);
 
-    try {
-      await _dio.download(
-        url,
-        tempPath,
-        cancelToken: cancelToken,
-        onReceiveProgress: onProgress,
-        options: Options(
-          followRedirects: true,
-          validateStatus: (status) => status != null && status < 400,
-        ),
-      );
-      // Rename temp → final hanya jika selesai sempurna
-      await File(tempPath).rename(path);
-      return path;
-    } catch (e) {
-      // Bersihkan temp file jika gagal / dibatalkan
-      final tmp = File(tempPath);
-      if (await tmp.exists()) await tmp.delete();
-      rethrow;
+    var done = 0;
+    var next = 1;
+    onProgress?.call(0, verseCount);
+
+    Future<void> worker() async {
+      while (true) {
+        if (cancelToken?.isCancelled ?? false) return;
+        final ayat = next++;
+        if (ayat > verseCount) return;
+        // Resume: file lengkap dari unduhan sebelumnya dilewati.
+        if (await getAyatPath(qariId, surahNumber, ayat) == null) {
+          final path = await ayatPath(qariId, surahNumber, ayat);
+          final tmp = '$path.tmp';
+          try {
+            await _fetch(ayatUrl(qari, surahNumber, ayat), tmp, cancelToken);
+            await File(tmp).rename(path);
+          } catch (_) {
+            final t = File(tmp);
+            if (await t.exists()) await t.delete();
+            rethrow;
+          }
+        }
+        onProgress?.call(++done, verseCount);
+      }
     }
+
+    // Satu worker gagal -> seluruh unduhan gagal; ayat yang sudah selesai
+    // tetap tersimpan sehingga percobaan berikutnya melanjutkan.
+    await Future.wait([for (var i = 0; i < parallel; i++) worker()]);
+    if (cancelToken?.isCancelled ?? false) {
+      throw DioException(
+          requestOptions: RequestOptions(), type: DioExceptionType.cancel);
+    }
+
+    final legacy = await _legacyFile(qariId, surahNumber);
+    if (await legacy.exists()) await legacy.delete();
   }
 
   @override
-  Future<void> delete(String qariId, int surahNumber) async {
-    final path = await _filePath(qariId, surahNumber);
-    final file = File(path);
-    if (await file.exists()) await file.delete();
+  Future<void> deleteSurah(String qariId, int surahNumber) async {
+    final dir = await _surahDir(qariId, surahNumber);
+    if (await dir.exists()) await dir.delete(recursive: true);
+    final legacy = await _legacyFile(qariId, surahNumber);
+    if (await legacy.exists()) await legacy.delete();
   }
 
   @override
   Future<void> deleteAll() async {
-    final base = await getApplicationDocumentsDirectory();
-    final murottalDir = Directory('${base.path}/murottal');
-    if (await murottalDir.exists()) {
-      await murottalDir.delete(recursive: true);
-    }
+    final dir = Directory(await _murottalPath());
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 
   @override
   Future<List<LocalAudioInfo>> listDownloaded() async {
-    final base = await getApplicationDocumentsDirectory();
-    final murottalDir = Directory('${base.path}/murottal');
-    if (!await murottalDir.exists()) return [];
+    final root = Directory(await _murottalPath());
+    if (!await root.exists()) return [];
 
     final result = <LocalAudioInfo>[];
-    await for (final qariEntity in murottalDir.list()) {
+    await for (final qariEntity in root.list()) {
       if (qariEntity is! Directory) continue;
       final qariId = qariEntity.path.split('/').last;
-      await for (final fileEntity in qariEntity.list()) {
-        if (fileEntity is! File) continue;
-        final name = fileEntity.path.split('/').last;
-        if (!name.endsWith('.mp3')) continue;
-        final numberStr = name.replaceAll('.mp3', '');
-        final surahNumber = int.tryParse(numberStr);
-        if (surahNumber == null) continue;
-        final size = await fileEntity.length();
-        result.add(LocalAudioInfo(
-          filePath: fileEntity.path,
-          fileSizeBytes: size,
-          qariId: qariId,
-          surahNumber: surahNumber,
-        ));
+      await for (final e in qariEntity.list()) {
+        final name = e.path.split('/').last;
+        if (e is File && name.endsWith('.mp3')) {
+          final n = int.tryParse(name.replaceAll('.mp3', ''));
+          if (n == null) continue;
+          result.add(LocalAudioInfo(
+            filePath: e.path,
+            fileSizeBytes: await e.length(),
+            qariId: qariId,
+            surahNumber: n,
+            isLegacy: true,
+          ));
+        } else if (e is Directory) {
+          final n = int.tryParse(name);
+          if (n == null) continue;
+          var size = 0, count = 0;
+          await for (final f in e.list()) {
+            if (f is File && f.path.endsWith('.mp3')) {
+              size += await f.length();
+              count++;
+            }
+          }
+          if (count == 0) continue;
+          result.add(LocalAudioInfo(
+            filePath: e.path,
+            fileSizeBytes: size,
+            qariId: qariId,
+            surahNumber: n,
+            fileCount: count,
+          ));
+        }
       }
     }
     result.sort((a, b) {
-      final qariCmp = a.qariId.compareTo(b.qariId);
-      if (qariCmp != 0) return qariCmp;
-      return a.surahNumber.compareTo(b.surahNumber);
+      final c = a.qariId.compareTo(b.qariId);
+      return c != 0 ? c : a.surahNumber.compareTo(b.surahNumber);
     });
     return result;
   }

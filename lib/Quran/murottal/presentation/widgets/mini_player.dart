@@ -29,7 +29,8 @@ class MiniPlayer extends StatelessWidget {
     return ValueListenableBuilder<MurottalState>(
       valueListenable: controller,
       builder: (context, state, _) {
-        if (state is MurottalIdle) return const SizedBox.shrink();
+        // NotDownloaded ditangani halaman (dialog unduh), bukan mini player.
+        if (state is MurottalIdle || state is MurottalNotDownloaded) return const SizedBox.shrink();
 
         return _MiniPlayerContent(
           state: state,
@@ -61,7 +62,7 @@ class _MiniPlayerContent extends StatelessWidget {
       MurottalPaused(:final surahName) => surahName,
       MurottalLoading(:final surahNumber, :final surahName) =>
         surahName.isEmpty ? 'Surah $surahNumber' : surahName,
-      MurottalError() => '',
+      MurottalError() || MurottalNotDownloaded() => '',
       MurottalIdle() => '',
     };
   }
@@ -74,6 +75,7 @@ class _MiniPlayerContent extends StatelessWidget {
         isFullSurah ? 'Full Surah' : 'Ayat $currentAyat / $totalAyat',
       MurottalLoading() => 'Memuat...',
       MurottalError(:final message) => message,
+      MurottalNotDownloaded() => 'Surah belum diunduh',
       MurottalIdle() => '',
     };
   }

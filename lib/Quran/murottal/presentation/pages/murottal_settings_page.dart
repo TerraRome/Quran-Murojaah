@@ -115,7 +115,7 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
       },
     );
     if (confirm == true) {
-      await _local.delete(info.qariId, info.surahNumber);
+      await _local.deleteSurah(info.qariId, info.surahNumber);
       await _loadDownloads();
     }
   }
@@ -304,7 +304,7 @@ class _MurottalSettingsPageState extends State<MurottalSettingsPage> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '${_downloads.length} file · $_totalSizeLabel',
+                              '${_downloads.length} surah · $_totalSizeLabel',
                               style: QuranTokens.poppins(
                                 TextStyle(
                                   fontSize: 13,
@@ -494,7 +494,9 @@ class _DownloadTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$_qariName · ${info.fileSizeLabel}',
+                  info.isLegacy
+                      ? '$_qariName · perlu unduh ulang'
+                      : '$_qariName · ${info.fileCount} ayat · ${info.fileSizeLabel}',
                   style: QuranTokens.poppins(
                     const TextStyle(fontSize: 12),
                   ).copyWith(color: QuranTokens.secondaryColor(dark)),

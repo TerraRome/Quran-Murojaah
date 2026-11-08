@@ -7,7 +7,7 @@ Test otomatis (`flutter test`) sudah lulus. Dokumen ini menguji hal yang tidak t
 ## Cara memakai
 
 1. Pasang build dari branch `main`, karena semua fitur Fase 1 dan Fase 3 sudah di sana.
-2. Jalankan tiap skenario, lalu isi kolom **Hasil** dengan `Lulus`, `Gagal`, atau `Lewati`.
+2. Jalankan tiap skenario, lalu isi kolom **Hasil** dengan `Lulus`, `Gagal`, atau `Lewati`. Isian `Uji ulang` berarti hasil lama sudah tidak berlaku karena ada perbaikan atau perubahan fitur sesudahnya. Isian `Belum diuji` berarti skenario belum pernah dijalankan.
 3. Untuk yang `Gagal`, tulis catatan di tabel paling bawah: ID skenario, kondisi, apa yang terjadi, dan tangkapan layar jika ada.
 4. Skenario bertanda **(diketahui)** menguji masalah yang sudah diketahui. Tujuannya mencatat perilaku nyata di HP, bukan mencari lulus.
 
@@ -33,6 +33,24 @@ Penguji yang disarankan: satu orang lansia dan satu anak untuk skenario bertanda
 | 1. Kenyamanan Baca | Semua skenario BC dan NF-1 sampai NF-3 lulus |
 | 3. Alat Belajar | Semua skenario BL lulus. **BL-08 wajib diuji di HP asli**; ini syarat resmi Fase 3 yang belum terpenuhi |
 
+## Status uji (per 2026-11-08)
+
+Uji pertama dijalankan Claude lewat Marionette di emulator. Belum ada uji di HP asli atau oleh penguji manusia. Kedua fase **belum memenuhi syarat selesai**.
+
+| Status | Arti | Skenario |
+|---|---|---|
+| Sudah: Lulus | Lulus di emulator, belum perlu diulang | BC-01-1..3, BC-02-1..2, BC-03-2, BC-03-4, BC-04-1, BC-05-1..4, BC-06-1..3, BC-06-5, BC-07-1..3, BC-08-1, BC-09-1, NF-2, NF-5-1, BL-01-1, BL-02-1..3, BL-03-1, BL-04-2..3, BL-05-1, BL-05-3, BL-07-1..6 |
+| Sudah: Lulus label saja | Label semantik benar, suara TalkBack atau perubahan suara belum didengar | BC-04-2, BC-04-3, NF-3, BL-01-2, BL-05-4 |
+| Belum: Uji ulang | Gagal atau berubah, lalu sudah diperbaiki, belum dicek lagi | BC-03-3, BC-06-4, BC-08-2, NF-1, BL-04-1, BL-04-4, BL-04-5, BL-05-2, BL-07-7, BL-08-1, NF-5-2, NF-5-3, NF-7-1, NF-7-2 |
+| Belum: Terblokir | Tertahan BL-08-1 (model gagal diunduh). Kini BL-08-1 sudah diperbaiki, jadi bisa dijalankan | BL-08-2..7, BL-08-9..12, sisa BL-08-8 dan BL-08-13 (bagian saat mic aktif) |
+| Belum diuji | Skenario baru atau ekspektasi diubah | BL-08-14, NF-8-1..19 |
+| Lewati: butuh alat lain | Butuh pasang ulang, mode pesawat dari awal, build versi lama, atau tutup paksa aplikasi | BC-01-4, BC-01-5, BC-03-1, BC-03-5, BL-01-3, NF-6-1..3 |
+| Lewati: tertutup unit test | Unit test lulus; tetap boleh dicek manual | BC-05-5, BC-06-6, BC-06-7 |
+| Lewati: tidak bisa dibuat dari UI | Kondisi uji tidak mungkin terjadi | BL-03-2 |
+| Lewati: perlu manusia | Butuh didengar langsung atau penguji lansia/anak | BL-01-4, BL-04-6, BL-06-1, BL-08-15 |
+
+**Murottal kini hanya offline** (`593a37d`). BL-01 sampai BL-07 diuji sebelum perubahan itu, saat audio masih diputar dari internet. Jalur putar sudah berganti ke file di HP, jadi ulangi BL-01 sampai BL-07 sekali dengan audio terunduh. NF-8-3 mencakup sebagian besar.
+
 ---
 
 ## Fase 1: Kenyamanan Baca
@@ -52,7 +70,7 @@ Buka **Pengaturan → Tampilan Ayat / Ukuran Teks**.
 | BC-02-2 | Matikan latin dan terjemahan sekaligus | Hanya teks Arab yang tampil, tanpa ruang kosong yang aneh | Lulus |
 | BC-03-1 👵 | Pasang aplikasi baru, buka surah tanpa mengubah pengaturan | Huruf langsung cukup besar (preset **Sedang** terpilih di Pengaturan) | Lewati: aplikasi sudah pernah dipakai, bukan pasang baru |
 | BC-03-2 ⭐👵 | Pilih preset **Kecil, Sedang, Besar, Sangat Besar** satu per satu | Preview (Arab, latin, terjemahan) langsung berubah; ketiganya membesar bersama | Lulus |
-| BC-03-3 ⭐ | Pilih **Sangat Besar**, buka Al-Baqarah ayat 282 (ayat terpanjang) | Teks tidak terpotong, tidak tumpang tindih, bisa digulir normal | Gagal: lompat ke ayat jauh berhenti di ayat 38, ayat 282 tidak tercapai (lihat catatan) |
+| BC-03-3 ⭐ | Pilih **Sangat Besar**, buka Al-Baqarah ayat 282 (ayat terpanjang) | Teks tidak terpotong, tidak tumpang tindih, bisa digulir normal | Uji ulang. Sebelumnya gagal: lompat ke ayat jauh berhenti di ayat 38. Diperbaiki di `2c7bb29` (lihat catatan) |
 | BC-03-4 | Pilih **Besar**, tutup dan buka ulang aplikasi | Preset **Besar** masih terpilih | Lulus |
 | BC-03-5 | Di versi lama aplikasi (lihat NF-06), atur ukuran huruf dengan slider ke angka yang tidak umum. Update ke build baru | Ukuran huruf sama seperti sebelum update; tidak ada preset yang terpilih sampai pengguna memilih | Lewati: butuh build versi lama, tidak tersedia |
 
@@ -76,8 +94,8 @@ Buka **Pengaturan → Tampilan Ayat / Ukuran Teks**.
 | BC-06-1 | Buka tab **Bookmark** saat belum ada yang disimpan | Muncul pesan "Belum ada ayat yang disimpan…" yang menjelaskan cara menyimpan; tidak ada teks "Segera hadir" | Lulus |
 | BC-06-2 | Simpan Yasin:1, lalu Al-Baqarah:255, lalu buka tab **Bookmark** | Urutan terbaru di atas: Al-Baqarah:255, lalu Yasin:1 | Lulus, Al-Baqarah:96 pengganti 255 |
 | BC-06-3 | Lihat satu baris di daftar | Berisi nama surah, nomor ayat, dan potongan terjemahan | Lulus |
-| BC-06-4 | Ketuk Al-Baqarah:255 di daftar | Halaman surah terbuka dan langsung bergulir ke ayat 255 | Gagal, berhenti di ayat 72 (lihat catatan) |
-| BC-06-5 | Hapus satu ayat dari tab **Bookmark** | Ayat hilang dari daftar; ikon di halaman surah juga kosong | Lulus |
+| BC-06-4 | Ketuk Al-Baqarah:255 di daftar | Halaman surah terbuka dan langsung bergulir ke ayat 255 | Uji ulang. Sebelumnya gagal: berhenti di ayat 72. Diperbaiki di `2c7bb29` (lihat catatan) |
+| BC-06-5 | Hapus satu ayat dari tab **Bookmark** | Ayat hilang dari daftar; ikon di halaman surah juga kosong | Lulus. Snackbar **Ayat dihapus** dengan **Batal** ditambah sesudahnya (`e8a224e`), belum diuji |
 | BC-06-6 | Simpan beberapa ayat, buat cadangan (backup), hapus data aplikasi, pulihkan cadangan | Ayat simpanan kembali | Lewati, tertutup unit test (lihat catatan) |
 | BC-06-7 | Pulihkan cadangan lama (dibuat sebelum fitur bookmark ada) | Pemulihan berhasil; simpanan yang ada di HP tidak terhapus | Lewati, tertutup unit test (lihat catatan) |
 
@@ -94,14 +112,14 @@ Buka **Pengaturan → Tampilan Ayat / Ukuran Teks**.
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
 | BC-08-1 ⭐👵 | Lihat menu bawah di halaman utama | Lima tab berlabel **Quran, Murojaah, Shalat, Doa, Bookmark**; label selalu terlihat, bukan hanya di tab aktif | Lulus |
-| BC-08-2 (kondisi C) | Lihat menu bawah dengan ukuran teks sistem terbesar | Label tidak terpotong dan tidak keluar dari menu | Gagal, label Murojaah dan Bookmark terpotong (lihat catatan) |
+| BC-08-2 (kondisi C) | Lihat menu bawah dengan ukuran teks sistem terbesar | Label tidak terpotong dan tidak keluar dari menu | Uji ulang. Sebelumnya gagal: label Murojaah dan Bookmark terpotong. Diperbaiki di `bbe86be` (lihat catatan) |
 | BC-09-1 👵 | Di tab Quran, cari kartu **Surat Yasin** di bawah kartu Last Read, lalu ketuk | Surah Yasin (36) terbuka di ayat 1 | Lulus |
 
 ### NF-01 sampai NF-04: Aksesibilitas umum
 
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
-| NF-1 (kondisi B, C) | Gulir daftar surah dan buka 3 surah berbeda | Tidak ada teks terpotong, garis kuning-hitam, atau tombol bertumpuk | Gagal: nomor surah 3 digit dan label menu bawah terpotong saat huruf besar (lihat catatan) |
+| NF-1 (kondisi B, C) | Gulir daftar surah dan buka 3 surah berbeda | Tidak ada teks terpotong, garis kuning-hitam, atau tombol bertumpuk | Uji ulang. Sebelumnya gagal: nomor surah 3 digit dan label menu bawah terpotong saat huruf besar. Diperbaiki di `bbe86be` (lihat catatan) |
 | NF-2 (kondisi D) | Ulangi NF-1 di mode gelap | Semua teks terbaca jelas; tidak ada teks gelap di atas latar gelap | Lulus |
 | NF-3 (kondisi E) | Dengan TalkBack, buka surah dan kembali ke halaman utama | Tombol Menu, Kembali, Cari surah, Mode gelap/terang dibacakan dengan nama yang jelas | Lulus, label saja: suara TalkBack belum didengar (lihat catatan) |
 
@@ -131,11 +149,11 @@ Buka pengaturan **Ulang** dari mini player.
 | BL-02-3 | Cek pilihan jumlah ulangan | Tersedia 1×, 3×, 5×, 10×, dan terus-menerus | Lulus |
 | BL-03-1 | Pilih **Rentang ayat** 2 sampai 4, jumlah ulangan 2; putar surah penuh Al-Ikhlas | Diputar 2, 3, 4, 2, 3, 4 lalu berhenti | Lulus: diuji dengan 3× karena pilihan 2× tidak ada (lihat catatan) |
 | BL-03-2 | Rentang ayat akhir lebih besar dari jumlah ayat surah | Tidak error; berhenti di ayat terakhir surah | Lewati: pilihan ayat akhir dibatasi sampai jumlah ayat surah, jadi kondisi ini tidak bisa dibuat dari UI (lihat catatan) |
-| BL-04-1 | **Satu ayat**, 3 kali, jeda 5 detik | Ada hening sekitar 5 detik di antara tiap ulangan | Lulus (lihat catatan) |
+| BL-04-1 | **Satu ayat**, 3 kali, jeda 5 detik | Ada hening sekitar 5 detik di antara tiap ulangan; mini player menampilkan **Jeda… N** dan tombol **Lewati jeda** | Uji ulang. Jeda 5 detik sudah lulus; tanda jeda ditambah sesudahnya (`0bc1720`), belum diuji (lihat catatan) |
 | BL-04-2 | Cek pilihan jeda | Tersedia tanpa jeda, 2 detik, dan 5 detik | Lulus |
 | BL-04-3 | Saat sedang jeda antar ulangan, tekan pause, lalu play | Pemutaran lanjut ke ulangan berikutnya | Lulus (lihat catatan) |
-| BL-04-4 | Saat sedang jeda antar ulangan, tekan pause, ubah pengaturan ulang, lalu tekan play | **(diketahui)** bisa jadi tidak ada suara. Catat perilakunya; ini bug yang akan diperbaiki | Gagal: bug diketahui terbukti; ikon berubah ke pause tapi posisi diam di akhir ayat dan tidak ada suara (lihat catatan) |
-| BL-04-5 | Ubah mode ulang, tutup aplikasi, buka lagi | Mode, jumlah, dan jeda ulang tetap seperti terakhir. Rentang ayat tidak disimpan: mode **Rentang** kembali ke **Mati** | Lewati: tutup dan buka aplikasi belum bisa diuji (lihat catatan) |
+| BL-04-4 | Saat sedang jeda antar ulangan, tekan pause, ubah pengaturan ulang, lalu tekan play | Pemutaran lanjut ke ulangan berikutnya dengan pengaturan baru | Uji ulang. Sebelumnya gagal: posisi diam di akhir ayat, tidak ada suara. Diperbaiki di `d78ce54` (lihat catatan) |
+| BL-04-5 | Ubah mode ulang, tutup aplikasi, buka lagi | Mode, jumlah, dan jeda ulang tetap seperti terakhir. Rentang ayat tidak disimpan: mode **Rentang** kembali ke **Mati** | Uji ulang. Dulu pengaturan tidak disimpan; kini disimpan permanen (`3ceaa43`). Tutup dan buka aplikasi di build rilis (lihat catatan) |
 | BL-04-6 👵🧒 | Minta penguji mengulang satu ayat 3 kali tanpa dibantu | Penguji menemukan tombol ulang dan berhasil (tugas uji kegunaan PRD §1.4) | Lewati: perlu penguji manusia |
 
 ### BL-05 dan BL-06: Daftar Juz
@@ -143,7 +161,7 @@ Buka pengaturan **Ulang** dari mini player.
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
 | BL-05-1 | Di halaman utama, ketuk **Juz** pada pilihan Surah/Juz | Daftar 30 juz tampil; item pertama **Juz Amma — surah pendek** (Juz 30), lalu Juz 1 sampai 29 | Lulus (lihat catatan) |
-| BL-05-2 | Ketuk Juz 2 | Al-Baqarah terbuka dan bergulir ke ayat 142 | Gagal: berhenti di ayat 71, bukan 142 (lihat catatan) |
+| BL-05-2 | Ketuk Juz 2 | Al-Baqarah terbuka dan bergulir ke ayat 142 | Uji ulang. Sebelumnya gagal: berhenti di ayat 71, bukan 142. Diperbaiki di `2c7bb29` (lihat catatan) |
 | BL-05-3 | Cek acak Juz 15, 23, 30 | Terbuka di Al-Isra:1, Yasin:28, An-Naba:1 | Lulus (lihat catatan) |
 | BL-05-4 (kondisi E) | TalkBack pada item Juz Amma | Terbaca "Juz 30, Juz Amma, surah pendek…" | Lulus, label saja: suara TalkBack belum didengar (lihat catatan) |
 | BL-06-1 🧒 | Minta anak mencari surah pendek untuk hafalan | Anak menemukan Juz Amma tanpa dibantu | Lewati: perlu penguji manusia |
@@ -156,9 +174,9 @@ Buka pengaturan **Ulang** dari mini player.
 | BL-07-2 | Putar surah penuh Al-Ikhlas | Setelah ayat terakhir, Al-Falaq ayat 1 langsung diputar | Lulus |
 | BL-07-3 | Matikan pengaturan itu, ulangi | Berhenti setelah ayat terakhir Al-Ikhlas | Lulus |
 | BL-07-4 | Putar satu ayat terakhir saja (bukan surah penuh) dengan pengaturan aktif | Tidak lanjut ke surah berikutnya | Lulus |
-| BL-07-5 | Putar surah penuh An-Nas (surah terakhir) | Berhenti setelah ayat terakhir; tidak error | Lulus (lihat catatan: file unduhan tidak dipakai) |
+| BL-07-5 | Putar surah penuh An-Nas (surah terakhir) | Berhenti setelah ayat terakhir; tidak error | Lulus. Temuan file unduhan tidak dipakai sudah diperbaiki di `593a37d` (lihat NF-08) |
 | BL-07-6 | Mode ulang aktif, lalu putar surah penuh | Mode ulang yang berlaku; tidak lanjut ke surah berikutnya | Lulus |
-| BL-07-7 | Saat lanjut otomatis berjalan, lihat layar | Halaman ikut pindah ke surah yang sedang diputar dan menggulir ke ayatnya | Sesuai yang diketahui; membingungkan (lihat catatan) |
+| BL-07-7 | Saat lanjut otomatis berjalan, lihat layar | Halaman ikut pindah ke surah yang sedang diputar dan menggulir ke ayatnya | Uji ulang. Dulu halaman tetap di surah lama; kini ikut pindah (`2d30f47`) (lihat catatan) |
 
 ### BL-08: Dengar lalu Tirukan (wajib di HP asli)
 
@@ -166,20 +184,20 @@ Masuk lewat tombol **Dengar lalu Tirukan · {surah}** di tab Murojaah. Tombol me
 
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
-| BL-08-1 | Pertama kali membuka mode ini | Izin mikrofon diminta; model pengenalan suara diunduh bila belum ada | Gagal: unduhan model gagal karena URL model di paket `recite_quran` 1.0.5 kini HTTP 504 (repo pindah). Spinner sekitar 1 menit tanpa progres, lalu pesan masalah. Izin mikrofon tidak diminta (lihat catatan) |
-| BL-08-2 | Tolak izin mikrofon | Muncul **Ada masalah (audio atau mikrofon). Coba lagi.** dan tombol **Mulai lagi**; aplikasi tidak macet | Lewati: terblokir BL-08-1 |
-| BL-08-3 👵🧒 | Dengarkan ayat 1 sampai selesai | Status **Dengarkan…** saat audio, lalu **Giliranmu, tirukan…** saat mic aktif; teks ayat terlihat terus | Lewati: terblokir BL-08-1 |
-| BL-08-4 | Tirukan ayat dengan benar | Muncul **Benar! Lanjut**, lalu ayat berikutnya diputar | Lewati: terblokir BL-08-1 |
-| BL-08-5 | Sengaja baca salah (lewati satu kata) | Muncul **Coba lagi**, lalu ayat yang sama diputar ulang | Lewati: terblokir BL-08-1 |
-| BL-08-6 | Benar sampai ayat terakhir | Muncul **Selesai**; mic mati | Lewati: terblokir BL-08-1 |
-| BL-08-7 | Atur jeda 5 detik dan kecepatan 0.75× di murottal, lalu ulangi BL-08-3 | Audio pakai 0.75×; ada jeda sekitar 5 detik sebelum mic aktif | Lewati: terblokir BL-08-1 (lihat catatan) |
-| BL-08-8 | Tekan **Berhenti** saat audio diputar, lalu saat mic aktif | Audio dan mic langsung mati; status **Dihentikan** | Sebagian lulus: saat audio, status **Dihentikan** dan tidak ada player aktif. Saat mic aktif terblokir BL-08-1 |
-| BL-08-9 | Diam saja saat **Giliranmu, tirukan…** | **(diketahui)** tidak ada batas waktu, layar menunggu terus. Catat berapa lama penguji menunggu sebelum bingung | Lewati: terblokir BL-08-1 |
-| BL-08-10 | Berhenti membaca di tengah ayat | Catat apakah dinilai **Coba lagi** atau menunggu terus | Lewati: terblokir BL-08-1 |
-| BL-08-11 | Uji tanpa headset (pakai speaker HP) | Suara speaker tidak terhitung sebagai bacaan pengguna | Lewati: terblokir BL-08-1 |
-| BL-08-12 | Uji dengan headset | Alur berjalan sama seperti tanpa headset | Lewati: terblokir BL-08-1 |
-| BL-08-13 | Tekan tombol kembali saat mic aktif | Keluar dari halaman; mic dan audio mati (cek ikon mic di status bar) | Sebagian lulus: kembali saat audio diputar menutup halaman dan audio mati. Saat mic aktif terblokir BL-08-1 |
-| BL-08-14 (kondisi F) | Mode pesawat, audio surah belum diunduh | Muncul ajakan unduh surah dengan tombol **Unduh**; alur tidak mulai; aplikasi tidak macet | Belum diuji. Ekspektasi diubah karena murottal kini hanya offline (lihat NF-8-11) |
+| BL-08-1 | Pertama kali membuka mode ini | Izin mikrofon diminta; model pengenalan suara diunduh bila belum ada, dengan persen unduhan. Bila gagal, muncul **Unduhan gagal. Periksa internet, lalu coba lagi.** dan tombol **Coba lagi** | Uji ulang. Sebelumnya gagal: URL model HTTP 504, izin mikrofon tidak diminta. Diperbaiki di `d1265b4` dan `7d26a50` (lihat catatan) |
+| BL-08-2 | Tolak izin mikrofon | Muncul **Ada masalah (audio atau mikrofon). Coba lagi.** dan tombol **Mulai lagi**; aplikasi tidak macet | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-3 👵🧒 | Dengarkan ayat 1 sampai selesai | Status **Dengarkan…** saat audio, lalu **Giliranmu, tirukan…** saat mic aktif; teks ayat terlihat terus | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-4 | Tirukan ayat dengan benar | Muncul **Benar! Lanjut**, lalu ayat berikutnya diputar | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-5 | Sengaja baca salah (lewati satu kata) | Muncul **Coba lagi**, lalu ayat yang sama diputar ulang | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-6 | Benar sampai ayat terakhir | Muncul **Selesai**; mic mati | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-7 | Atur jeda 5 detik dan kecepatan 0.75× di murottal, lalu ulangi BL-08-3 | Audio pakai 0.75×; ada jeda sekitar 5 detik sebelum mic aktif | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan (lihat catatan) |
+| BL-08-8 | Tekan **Berhenti** saat audio diputar, lalu saat mic aktif | Audio dan mic langsung mati; status **Dihentikan** | Sebagian lulus: saat audio, status **Dihentikan** dan tidak ada player aktif. Saat mic aktif belum diuji (dulu terblokir BL-08-1) |
+| BL-08-9 | Diam saja saat **Giliranmu, tirukan…** | **(diketahui)** tidak ada batas waktu, layar menunggu terus. Catat berapa lama penguji menunggu sebelum bingung | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-10 | Berhenti membaca di tengah ayat | Catat apakah dinilai **Coba lagi** atau menunggu terus | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-11 | Uji tanpa headset (pakai speaker HP) | Suara speaker tidak terhitung sebagai bacaan pengguna | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-12 | Uji dengan headset | Alur berjalan sama seperti tanpa headset | Belum diuji: dulu terblokir BL-08-1, kini bisa dijalankan |
+| BL-08-13 | Tekan tombol kembali saat mic aktif | Keluar dari halaman; mic dan audio mati (cek ikon mic di status bar) | Sebagian lulus: kembali saat audio diputar menutup halaman dan audio mati. Saat mic aktif belum diuji (dulu terblokir BL-08-1) |
+| BL-08-14 (kondisi F) | Mode pesawat, audio surah belum diunduh | Muncul ajakan unduh surah dengan tombol **Unduh**; alur tidak mulai; aplikasi tidak macet | Belum diuji. Ekspektasi diubah karena murottal kini hanya offline (lihat NF-8-12) |
 | BL-08-15 🧒 | Minta anak berlatih 3 ayat sendiri | Anak paham kapan mendengar dan kapan giliran membaca tanpa dijelaskan | Lewati: perlu penguji manusia |
 
 ---
@@ -191,8 +209,8 @@ Masuk lewat tombol **Dengar lalu Tirukan · {surah}** di tab Murojaah. Tombol me
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
 | NF-5-1 | Mode pesawat (setelah pernah online sekali). Buka surah, ubah ukuran teks, simpan ayat, buka tab Bookmark, buka tab Juz | Semua berjalan normal | Lulus untuk offline. Juz 4 terbuka di ayat yang salah, tapi itu bug lompat ayat (BC-06-4), bukan masalah offline |
-| NF-5-2 | Mode pesawat, putar ayat yang audionya sudah diunduh, pakai kecepatan dan ulang | Berjalan normal | Belum diuji ulang. Sebelumnya gagal karena file unduhan tidak dipakai; kini diperbaiki (lihat NF-08) |
-| NF-5-3 | Mode pesawat, putar ayat yang audionya belum diunduh | Muncul **Surah ini belum diunduh.** dengan tombol **Unduh**; audio tidak diputar; aplikasi tidak macet | Belum diuji ulang. Ekspektasi diubah karena murottal kini hanya offline |
+| NF-5-2 | Mode pesawat, putar ayat yang audionya sudah diunduh, pakai kecepatan dan ulang | Berjalan normal | Uji ulang. Sebelumnya gagal karena file unduhan tidak dipakai. Diperbaiki di `593a37d` (lihat NF-08) |
+| NF-5-3 | Mode pesawat, putar ayat yang audionya belum diunduh | Muncul **Surah ini belum diunduh.** dengan tombol **Unduh**; audio tidak diputar; aplikasi tidak macet | Uji ulang. Dulu lulus dengan pesan koneksi; ekspektasi diubah karena murottal kini hanya offline |
 
 ### NF-06: Data lama tetap ada setelah update
 
@@ -208,8 +226,8 @@ Pasang versi lama dari commit `9531cc6` (sebelum fitur PRD ini), pakai beberapa 
 
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
-| NF-7-1 (kondisi F) | Putar ulang ayat (BL-02) saat audio gagal dimuat | **(diketahui)** pesan bisa memuat teks teknis setelah "Gagal memuat audio:". Catat isi pesannya | Pesan: **Gagal memuat audio: (0) Source error** |
-| NF-7-2 | Telusuri semua layar yang diuji di dokumen ini | Tidak ada kata seperti "error", "sync", "null", atau kode teknis. Catat jika ada | Gagal: 6 tempat di kode bisa menampilkan teks teknis (lihat catatan) |
+| NF-7-1 | Putar ulang ayat (BL-02) saat file audio gagal dimuat (misalnya file ayat rusak atau terhapus di luar aplikasi) | Pesan **Gagal memuat audio. Coba lagi, atau unduh ulang surah ini.** tanpa teks teknis | Uji ulang. Sebelumnya: **Gagal memuat audio: (0) Source error**. Diperbaiki di `d78ce54`. Mode pesawat kini tidak memicu gagal muat karena audio diputar dari file |
+| NF-7-2 | Telusuri semua layar yang diuji di dokumen ini | Tidak ada kata seperti "error", "sync", "null", atau kode teknis. Catat jika ada | Uji ulang. Sebelumnya gagal: 6 tempat di kode bisa menampilkan teks teknis. Diperbaiki di `a4daf51` (lihat catatan) |
 
 ### NF-08: Murottal offline (unduh per surah)
 
@@ -217,25 +235,25 @@ Murottal kini hanya diputar dari file di HP, tidak ada pemutaran online. Penggun
 
 | ID | Langkah | Hasil yang diharapkan | Hasil |
 |---|---|---|---|
-| NF-8-1 | Pasang baru. Buka Al-Fatihah, tekan putar ayat 1 | Muncul **Surah ini belum diunduh.** dengan perkiraan ukuran dan tombol **Unduh**. Tidak ada suara | |
-| NF-8-2 | Di dialog itu tekan **Unduh** (Wi-Fi) | Progres berjalan per ayat sampai selesai; tombol di kepala surah berubah jadi status sudah diunduh | |
-| NF-8-3 ⭐ (kondisi F) | Mode pesawat. Putar Al-Fatihah per ayat dan surah penuh; coba 0.75×, ulang 3× jeda 5 detik, sebelum/berikutnya | Semua berjalan normal tanpa pesan gagal; ada **Jeda… N** saat jeda | |
-| NF-8-4 (kondisi F) | Tutup aplikasi sepenuhnya (hapus dari daftar aplikasi terbaru), nyalakan mode pesawat, buka lagi, putar Al-Fatihah | Audio langsung diputar; tidak butuh internet sama sekali | |
-| NF-8-5 | Unduh Al-Baqarah. Di tengah unduhan, matikan internet | Muncul pesan gagal yang mudah dipahami, tanpa teks teknis | |
-| NF-8-6 | Nyalakan internet lagi, tekan **Unduh** Al-Baqarah lagi | Progres langsung mulai dari ayat yang sudah ada, bukan dari 0 | |
-| NF-8-7 | Saat mengunduh, tekan **Batalkan** | Dialog tertutup tanpa pesan error; unduh lagi melanjutkan dari ayat terakhir | |
-| NF-8-8 | Matikan Wi-Fi, pakai data seluler. Buka dialog unduh Al-Baqarah, lalu Al-Fatihah | Al-Baqarah: ada peringatan kuota dan tombol **Unduh dengan data seluler**. Al-Fatihah (di bawah 50 MB): tanpa peringatan | |
-| NF-8-9 (opsional) | Penuhi memori HP sampai sisa ruang lebih kecil dari ukuran Al-Baqarah, buka dialog unduh | Muncul pesan ruang tidak cukup; tombol **Unduh** tidak ada | |
-| NF-8-10 | Al-Ikhlas sudah diunduh, Al-Falaq belum. Lanjut otomatis aktif, putar Al-Ikhlas surah penuh | Setelah ayat 4 berhenti, muncul **Surah berikutnya belum diunduh. Murottal berhenti.** | |
-| NF-8-11 (kondisi F) | Al-Ikhlas dan Al-Falaq sudah diunduh, mode pesawat, ulangi NF-8-10 | Lanjut ke Al-Falaq; halaman ikut pindah | |
-| NF-8-12 | Buka Dengar lalu Tirukan pada surah yang belum diunduh | Muncul ajakan unduh dan tombol **Unduh**; alur tidak mulai. Setelah unduhan selesai, alur mulai sendiri | |
-| NF-8-13 (kondisi F) | Surah sudah diunduh dan model suara sudah ada. Mode pesawat, jalankan Dengar lalu Tirukan sampai selesai | Dengar, tirukan, dan penilaian berjalan tanpa internet | |
-| NF-8-14 | Ganti qari, buka Al-Fatihah | Surah tampil belum diunduh untuk qari baru. Kembali ke qari lama: Al-Fatihah masih sudah diunduh, tanpa unduh ulang | |
-| NF-8-15 | Buka Pengaturan Murottal, lihat daftar unduhan, hapus satu surah | Tiap baris berisi qari, jumlah ayat, dan ukuran. Surah yang dihapus kembali belum diunduh; unduhan qari lain tetap ada | |
-| NF-8-16 | Bandingkan perkiraan ukuran di dialog dengan ukuran di Pengaturan setelah unduh | Catat selisihnya. Perkiraan boleh meleset, tapi tidak lebih dari separuh | |
-| NF-8-17 (update) | Pasang versi lama sebelum `1c51298`, unduh satu surah, lalu pasang build baru di atasnya | Surah itu tampil **Unduh Ulang Murottal** dan **perlu unduh ulang** di Pengaturan. Setelah unduh ulang selesai, entri lama hilang dari daftar | |
-| NF-8-18 ⭐ (kondisi E) | TalkBack aktif, buka dialog unduh, lalu unduh | Pesan, perkiraan ukuran, peringatan kuota, tombol, dan progres dibacakan | |
-| NF-8-19 👵🧒 | Minta lansia atau anak mengunduh satu surah lalu memutarnya | Bisa selesai tanpa dibantu. Catat di langkah mana mereka ragu | |
+| NF-8-1 | Pasang baru. Buka Al-Fatihah, tekan putar ayat 1 | Muncul **Surah ini belum diunduh.** dengan perkiraan ukuran dan tombol **Unduh**. Tidak ada suara | Belum diuji |
+| NF-8-2 | Di dialog itu tekan **Unduh** (Wi-Fi) | Progres berjalan per ayat sampai selesai; tombol di kepala surah berubah jadi status sudah diunduh | Belum diuji |
+| NF-8-3 ⭐ (kondisi F) | Mode pesawat. Putar Al-Fatihah per ayat dan surah penuh; coba 0.75×, ulang 3× jeda 5 detik, sebelum/berikutnya | Semua berjalan normal tanpa pesan gagal; ada **Jeda… N** saat jeda | Belum diuji |
+| NF-8-4 (kondisi F) | Tutup aplikasi sepenuhnya (hapus dari daftar aplikasi terbaru), nyalakan mode pesawat, buka lagi, putar Al-Fatihah | Audio langsung diputar; tidak butuh internet sama sekali | Belum diuji |
+| NF-8-5 | Unduh Al-Baqarah. Di tengah unduhan, matikan internet | Muncul pesan gagal yang mudah dipahami, tanpa teks teknis | Belum diuji |
+| NF-8-6 | Nyalakan internet lagi, tekan **Unduh** Al-Baqarah lagi | Progres langsung mulai dari ayat yang sudah ada, bukan dari 0 | Belum diuji |
+| NF-8-7 | Saat mengunduh, tekan **Batalkan** | Dialog tertutup tanpa pesan error; unduh lagi melanjutkan dari ayat terakhir | Belum diuji |
+| NF-8-8 | Matikan Wi-Fi, pakai data seluler. Buka dialog unduh Al-Baqarah, lalu Al-Fatihah | Al-Baqarah: ada peringatan kuota dan tombol **Unduh dengan data seluler**. Al-Fatihah (di bawah 50 MB): tanpa peringatan | Belum diuji |
+| NF-8-9 (opsional) | Penuhi memori HP sampai sisa ruang lebih kecil dari ukuran Al-Baqarah, buka dialog unduh | Muncul pesan ruang tidak cukup; tombol **Unduh** tidak ada | Belum diuji |
+| NF-8-10 | Al-Ikhlas sudah diunduh, Al-Falaq belum. Lanjut otomatis aktif, putar Al-Ikhlas surah penuh | Setelah ayat 4 berhenti, muncul **Surah berikutnya belum diunduh. Murottal berhenti.** | Belum diuji |
+| NF-8-11 (kondisi F) | Al-Ikhlas dan Al-Falaq sudah diunduh, mode pesawat, ulangi NF-8-10 | Lanjut ke Al-Falaq; halaman ikut pindah | Belum diuji |
+| NF-8-12 | Buka Dengar lalu Tirukan pada surah yang belum diunduh | Muncul ajakan unduh dan tombol **Unduh**; alur tidak mulai. Setelah unduhan selesai, alur mulai sendiri | Belum diuji |
+| NF-8-13 (kondisi F) | Surah sudah diunduh dan model suara sudah ada. Mode pesawat, jalankan Dengar lalu Tirukan sampai selesai | Dengar, tirukan, dan penilaian berjalan tanpa internet | Belum diuji |
+| NF-8-14 | Ganti qari, buka Al-Fatihah | Surah tampil belum diunduh untuk qari baru. Kembali ke qari lama: Al-Fatihah masih sudah diunduh, tanpa unduh ulang | Belum diuji |
+| NF-8-15 | Buka Pengaturan Murottal, lihat daftar unduhan, hapus satu surah | Tiap baris berisi qari, jumlah ayat, dan ukuran. Surah yang dihapus kembali belum diunduh; unduhan qari lain tetap ada | Belum diuji |
+| NF-8-16 | Bandingkan perkiraan ukuran di dialog dengan ukuran di Pengaturan setelah unduh | Catat selisihnya. Perkiraan boleh meleset, tapi tidak lebih dari separuh | Belum diuji |
+| NF-8-17 (update) | Pasang versi lama sebelum `1c51298`, unduh satu surah, lalu pasang build baru di atasnya | Surah itu tampil **Unduh Ulang Murottal** dan **perlu unduh ulang** di Pengaturan. Setelah unduh ulang selesai, entri lama hilang dari daftar | Belum diuji |
+| NF-8-18 ⭐ (kondisi E) | TalkBack aktif, buka dialog unduh, lalu unduh | Pesan, perkiraan ukuran, peringatan kuota, tombol, dan progres dibacakan | Belum diuji |
+| NF-8-19 👵🧒 | Minta lansia atau anak mengunduh satu surah lalu memutarnya | Bisa selesai tanpa dibantu. Catat di langkah mana mereka ragu | Belum diuji |
 
 ---
 
@@ -303,3 +321,4 @@ Murottal kini hanya diputar dari file di HP, tidak ada pemutaran online. Penggun
 | BL-04-5, BL-08-7 | Perbaikan, belum diuji ulang | Mode, jumlah, dan jeda ulang disimpan permanen, jadi jeda dari murottal terbawa ke Dengar lalu Tirukan. Rentang ayat tidak disimpan; mode Rentang dimuat sebagai Mati. Ekspektasi BL-04-5 diubah | Claude | 2026-11-08 |
 | BL-04-1 | Perbaikan, belum diuji ulang | Saat jeda antar ulangan, mini player menampilkan **Jeda… N** dengan lingkaran kecil, dan tombol putar jadi **Lewati jeda**. Label TalkBack "Jeda N detik sebelum ulangan berikutnya" belum dicek di HP. Selama jeda tombol Jeda tidak tampil; jeda bisa dihentikan dengan menutup pemutar | Claude | 2026-11-08 |
 | NF-5-2, BL-07-5 | Perbaikan, belum diuji ulang | Murottal kini hanya diputar dari file per ayat di HP (`murottal/{qari}/{SSS}/{AAA}.mp3`); tidak ada lagi pemutaran online atau panggilan API saat memutar. Surah yang belum diunduh menampilkan ajakan unduh. Skenario baru: NF-08. Build Android dan iOS lulus kompilasi, belum dicoba di HP | Claude | 2026-11-08 |
+| NF-7-1 | Perubahan, belum diuji | Sejak murottal hanya offline (`593a37d`), pesan gagal audio menjadi **Gagal memuat audio. Coba lagi, atau unduh ulang surah ini.** Pesan pada catatan perbaikan NF-5-3/NF-7-1 di atas sudah tidak berlaku | Claude | 2026-11-08 |

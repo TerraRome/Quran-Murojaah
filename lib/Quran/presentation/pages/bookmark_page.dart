@@ -82,6 +82,24 @@ class _BookmarkRow extends StatelessWidget {
   final BookmarkController bookmarks;
   final bool dark;
 
+  void _remove(BuildContext context) {
+    bookmarks.remove(bookmark.surah, bookmark.ayat);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('Ayat dihapus'),
+          // Snackbar bertombol aksi defaultnya tidak hilang sendiri.
+          persist: false,
+          // merge() mempertahankan savedAt asli, jadi posisi urutan kembali.
+          action: SnackBarAction(
+            label: 'Batal',
+            onPressed: () => bookmarks.merge([bookmark]),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final surah = controller.surahs
@@ -133,7 +151,7 @@ class _BookmarkRow extends StatelessWidget {
         IconButton(
           tooltip: 'Hapus simpanan ayat ${bookmark.ayat} $name',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          onPressed: () => bookmarks.remove(bookmark.surah, bookmark.ayat),
+          onPressed: () => _remove(context),
           icon: const Icon(Icons.delete_outline_rounded, size: 24),
           color: QuranTokens.secondaryColor(dark),
         ),

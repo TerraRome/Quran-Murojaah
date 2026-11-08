@@ -71,6 +71,22 @@ void main() {
       ]);
     });
 
+    test('hapus lalu pulihkan lewat merge: kembali ke posisi semula', () async {
+      final c = BookmarkController();
+      await c.toggle(1, 1, at: DateTime(2026, 1, 1));
+      await c.toggle(2, 255, at: DateTime(2026, 1, 2));
+      await c.toggle(36, 5, at: DateTime(2026, 1, 3));
+      final removed = c.items[1];
+      await c.remove(removed.surah, removed.ayat);
+      await c.merge([removed]);
+      expect([for (final b in c.items) '${b.surah}:${b.ayat}'], [
+        '36:5',
+        '2:255',
+        '1:1',
+      ]);
+      expect(c.items[1].savedAt, DateTime(2026, 1, 2));
+    });
+
     test('simpan sebelum load selesai tidak menimpa daftar tersimpan', () async {
       final first = BookmarkController();
       await first.toggle(1, 1, at: DateTime(2026, 1, 1));

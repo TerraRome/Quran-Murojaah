@@ -275,5 +275,51 @@ void main() {
       expect(find.text('Al-Fatihah · Ayat 3'), findsNothing);
       expect(find.text('Al-Baqarah · Ayat 30'), findsOneWidget);
     });
+
+    testWidgets('hapus: snackbar Batal memulihkan ayat di posisi semula',
+        (tester) async {
+      final (bookmarks, _) = await pumpPage(tester);
+      await bookmarks.toggle(1, 3, at: DateTime(2026, 1, 1));
+      await bookmarks.toggle(1, 4, at: DateTime(2026, 1, 2));
+      await bookmarks.toggle(2, 30, at: DateTime(2026, 1, 3));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hapus simpanan ayat 4 Al-Fatihah'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ayat dihapus'), findsOneWidget);
+      expect(find.text('Al-Fatihah · Ayat 4'), findsNothing);
+
+      await tester.tap(find.text('Batal'));
+      await tester.pumpAndSettle();
+      expect(bookmarks.isSaved(1, 4), isTrue);
+      final dy = [
+        for (final t in [
+          'Al-Baqarah · Ayat 30',
+          'Al-Fatihah · Ayat 4',
+          'Al-Fatihah · Ayat 3',
+        ])
+          tester.getTopLeft(find.text(t)).dy,
+      ];
+      expect(dy[0], lessThan(dy[1]));
+      expect(dy[1], lessThan(dy[2]));
+    });
+
+    testWidgets('snackbar hapus hilang sendiri; hapus kedua mengganti yang '
+        'pertama', (tester) async {
+      final (bookmarks, _) = await pumpPage(tester);
+      await bookmarks.toggle(1, 3, at: DateTime(2026, 1, 1));
+      await bookmarks.toggle(1, 4, at: DateTime(2026, 1, 2));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hapus simpanan ayat 4 Al-Fatihah'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Hapus simpanan ayat 3 Al-Fatihah'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ayat dihapus'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Ayat dihapus'), findsNothing);
+    });
   });
 }

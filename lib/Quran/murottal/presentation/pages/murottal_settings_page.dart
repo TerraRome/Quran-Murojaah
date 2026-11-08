@@ -541,7 +541,7 @@ class _EmptyDownloads extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Download murottal dari halaman surah',
+            'Unduh murottal dari halaman surah',
             style: QuranTokens.poppins(
               const TextStyle(fontSize: 12),
             ).copyWith(

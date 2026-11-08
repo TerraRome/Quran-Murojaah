@@ -85,6 +85,8 @@ class SettingsPage extends StatelessWidget {
                         arabicSize: controller.arabicFontSize,
                         latinSize: controller.latinFontSize,
                         translationSize: controller.translationFontSize,
+                        showLatin: controller.showLatin,
+                        showTranslation: controller.showTranslation,
                       ),
                       const SizedBox(height: 24),
                       Center(
@@ -164,12 +166,16 @@ class _PreviewCard extends StatelessWidget {
     required this.arabicSize,
     required this.latinSize,
     required this.translationSize,
+    required this.showLatin,
+    required this.showTranslation,
   });
 
   final bool dark;
   final double arabicSize;
   final double latinSize;
   final double translationSize;
+  final bool showLatin;
+  final bool showTranslation;
 
   @override
   Widget build(BuildContext context) {
@@ -192,25 +198,32 @@ class _PreviewCard extends StatelessWidget {
               height: 1.9,
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Bismillāhir-raḥmānir-raḥīm(i).',
-            style: QuranTokens.poppins(QuranTokens.tsVerseTranslation).copyWith(
-              fontSize: latinSize,
-              fontStyle: FontStyle.italic,
-              color: QuranTokens.secondaryColor(dark),
-              height: 1.6,
+          if (showLatin) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Bismillāhir-raḥmānir-raḥīm(i).',
+              style: QuranTokens.poppins(QuranTokens.tsVerseTranslation)
+                  .copyWith(
+                    fontSize: latinSize,
+                    fontStyle: FontStyle.italic,
+                    color: QuranTokens.secondaryColor(dark),
+                    height: 1.6,
+                  ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Dengan nama Allah Yang Maha Pengasih, Maha Penyayang.',
-            style: QuranTokens.poppins(QuranTokens.tsVerseTranslation).copyWith(
-              fontSize: translationSize,
-              color: QuranTokens.secondaryColor(dark),
-              height: 1.6,
+          ],
+          if (showTranslation) ...[
+            const SizedBox(height: 12),
+            Text(
+              // Sama dengan terjemahan Kemenag 1:1 di halaman surah.
+              'Dengan menyebut nama Allah Yang Maha Pemurah lagi Maha Penyayang.',
+              style: QuranTokens.poppins(QuranTokens.tsVerseTranslation)
+                  .copyWith(
+                    fontSize: translationSize,
+                    color: QuranTokens.secondaryColor(dark),
+                    height: 1.6,
+                  ),
             ),
-          ),
+          ],
         ],
       ),
     );

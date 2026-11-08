@@ -68,7 +68,7 @@ class DownloadProgressDialog extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Download Murottal',
+                  'Unduh Murottal',
                   style: QuranTokens.poppins(
                     const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w600),
@@ -110,7 +110,7 @@ class DownloadProgressDialog extends StatelessWidget {
           ),
           icon: const Icon(Icons.download_rounded, size: 16),
           label: Text(
-            'Download',
+            'Unduh',
             style: QuranTokens.poppins(
               const TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -246,7 +246,7 @@ class _ReadyContent extends StatelessWidget {
         const SizedBox(height: 8),
         const _InfoRow(
           icon: Icons.wifi_off_rounded,
-          label: 'Setelah download',
+          label: 'Setelah diunduh',
           value: 'Offline ready',
         ),
       ],

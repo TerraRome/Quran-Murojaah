@@ -71,7 +71,7 @@ void main() {
     expect(find.text('Bismillāhir-raḥmānir-raḥīm(i).'), findsOneWidget);
     expect(
       find.text(
-        'Dengan nama Allah Yang Maha Pengasih, Maha Penyayang.',
+        'Dengan menyebut nama Allah Yang Maha Pemurah lagi Maha Penyayang.',
       ),
       findsOneWidget,
     );
@@ -83,5 +83,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Reset'), findsOneWidget);
+  });
+
+  testWidgets('preview ikut toggle latin dan terjemahan', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    const latin = 'Bismillāhir-raḥmānir-raḥīm(i).';
+    const terjemah =
+        'Dengan menyebut nama Allah Yang Maha Pemurah lagi Maha Penyayang.';
+    expect(find.text(latin), findsOneWidget);
+    expect(find.text(terjemah), findsOneWidget);
+
+    await tester.tap(find.text('Tampilkan latin'));
+    await tester.pumpAndSettle();
+    expect(find.text(latin), findsNothing);
+    expect(find.text(terjemah), findsOneWidget);
+
+    await tester.tap(find.text('Tampilkan terjemahan'));
+    await tester.pumpAndSettle();
+    expect(find.text(terjemah), findsNothing);
   });
 }

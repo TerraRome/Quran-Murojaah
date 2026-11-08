@@ -447,7 +447,7 @@ class _Greeting extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Asslamualaikum',
+            'Assalamualaikum',
             style: QuranTokens.poppins(
               QuranTokens.tsGreeting,
             ).copyWith(color: QuranTokens.secondaryColor(dark)),

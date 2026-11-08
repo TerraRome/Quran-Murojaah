@@ -81,7 +81,8 @@ class TafsirController extends ValueNotifier<TafsirState> {
     } on EquranApiException catch (e) {
       value = TafsirError(e.message);
     } catch (e) {
-      value = TafsirError('Terjadi kesalahan: $e');
+      debugPrint('[Tafsir] gagal memuat: $e');
+      value = const TafsirError('Tafsir belum bisa dimuat. Coba lagi nanti.');
     }
   }
 

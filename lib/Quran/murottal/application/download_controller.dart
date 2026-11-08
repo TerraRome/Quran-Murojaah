@@ -183,10 +183,12 @@ class DownloadController extends ValueNotifier<DownloadState> {
       if (CancelToken.isCancel(e)) {
         value = const DownloadIdle();
       } else {
-        value = DownloadError('Unduhan gagal: ${e.message ?? 'Kesalahan jaringan'}');
+        debugPrint('[Download] gagal: ${e.message}');
+        value = const DownloadError('Unduhan gagal. Periksa internet, lalu coba lagi.');
       }
     } catch (e) {
-      value = DownloadError('Unduhan gagal: $e');
+      debugPrint('[Download] gagal: $e');
+      value = const DownloadError('Unduhan gagal. Periksa internet, lalu coba lagi.');
     }
   }
 

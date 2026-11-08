@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Terjemahan [DioException] menjadi pesan ramah untuk pengguna.
 ///
@@ -12,9 +13,10 @@ String dioErrorMessage(DioException e) {
     case DioExceptionType.connectionError:
       return 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
     case DioExceptionType.badResponse:
-      final status = e.response?.statusCode;
-      return 'Server mengembalikan error $status.';
+      debugPrint('[Dio] respons ${e.response?.statusCode}: ${e.message}');
+      return 'Server sedang bermasalah. Coba lagi nanti.';
     default:
-      return 'Terjadi kesalahan jaringan: ${e.message}';
+      debugPrint('[Dio] ${e.type}: ${e.message}');
+      return 'Koneksi bermasalah. Periksa internet Anda, lalu coba lagi.';
   }
 }

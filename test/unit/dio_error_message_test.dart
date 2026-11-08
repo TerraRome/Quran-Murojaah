@@ -37,13 +37,12 @@ void main() {
         statusCode: 503,
       ),
     );
-    expect(dioErrorMessage(e), 'Server mengembalikan error 503.');
+    expect(dioErrorMessage(e), 'Server sedang bermasalah. Coba lagi nanti.');
   });
 
-  test('lainnya memakai pesan asli', () {
-    expect(
-      dioErrorMessage(err(DioExceptionType.unknown)),
-      'Terjadi kesalahan jaringan: boom',
-    );
+  test('lainnya tanpa teks teknis dari exception', () {
+    final msg = dioErrorMessage(err(DioExceptionType.unknown));
+    expect(msg, 'Koneksi bermasalah. Periksa internet Anda, lalu coba lagi.');
+    expect(msg, isNot(contains('boom')));
   });
 }

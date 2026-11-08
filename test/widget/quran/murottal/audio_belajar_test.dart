@@ -18,7 +18,10 @@ class _FakePlayer extends Fake implements AudioPlayer {
   final urls = <String>[];
   final speeds = <double>[];
   int seeks = 0;
+  ProcessingState processing = ProcessingState.ready;
 
+  @override
+  ProcessingState get processingState => processing;
   @override
   Stream<PlayerState> get playerStateStream => state.stream;
   @override
@@ -46,12 +49,17 @@ class _FakePlayer extends Fake implements AudioPlayer {
   @override
   Future<void> stop() async {}
   @override
-  Future<void> seek(Duration? position, {int? index}) async => seeks++;
+  Future<void> seek(Duration? position, {int? index}) async {
+    seeks++;
+    processing = ProcessingState.ready; // seek menghidupkan lagi sumber yang selesai
+  }
   @override
   Future<void> dispose() async {}
 
-  void complete() =>
-      state.add(PlayerState(true, ProcessingState.completed));
+  void complete() {
+    processing = ProcessingState.completed;
+    state.add(PlayerState(true, ProcessingState.completed));
+  }
 }
 
 class _FakeRemote implements EquranRemoteDataSource {
@@ -142,6 +150,41 @@ void main() {
       expect(p.seeks, 2);
       await complete(p);
       expect(c.value, isA<MurottalIdle>());
+    });
+
+    test('BL-04-4: pause saat jeda, ganti jeda ke 0, play -> lanjut ulangan',
+        () async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 3, gapSeconds: 5));
+      await c.playAyat(surahNumber: 1, surahName: 'S1', ayatNumber: 1, totalAyat: 2);
+      await complete(p); // masuk jeda 5 dtk
+      await c.pause();
+      c.setRepeat(c.repeat.value.copyWith(gapSeconds: 0));
+      await c.resume();
+      await pumpEventQueue();
+      expect(p.seeks, 1); // ulangan ke-2 benar-benar diputar
+      expect(c.value, isA<MurottalPlaying>());
+      await complete(p);
+      expect(p.seeks, 2);
+      await complete(p);
+      expect(c.value, isA<MurottalIdle>());
+    });
+
+    test('BL-04-4: ganti jeda saat jeda berjalan (tanpa pause) tetap lanjut',
+        () async {
+      final p = _FakePlayer();
+      final c = make(p);
+      await c.prefsLoaded;
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.ayat, count: 3, gapSeconds: 5));
+      await c.playAyat(surahNumber: 1, surahName: 'S1', ayatNumber: 1, totalAyat: 2);
+      await complete(p);
+      c.setRepeat(c.repeat.value.copyWith(gapSeconds: 0));
+      await pumpEventQueue();
+      expect(p.seeks, 1);
     });
 
     test('rentang 1..2 x2 memutar ulang dari awal', () async {
@@ -243,6 +286,38 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.repeat.value.count, RepeatSettings.infinite);
       expect(c.repeat.value.gapSeconds, 5);
+    });
+
+    testWidgets('tombol punya tooltip berbahasa Indonesia', (tester) async {
+      final (c, _) = await pumpPlayer(tester);
+      expect(find.byTooltip('Jeda'), findsOneWidget);
+      expect(find.byTooltip('Ayat sebelumnya'), findsOneWidget);
+      expect(find.byTooltip('Ayat berikutnya'), findsOneWidget);
+      expect(find.byTooltip('Tutup pemutar'), findsOneWidget);
+      await c.pause();
+      await tester.pump();
+      expect(find.byTooltip('Putar'), findsOneWidget);
+    });
+
+    testWidgets('saat memuat, judul memakai nama surah', (tester) async {
+      final (c, _) = await pumpPlayer(tester);
+      c.value = const MurottalLoading(surahNumber: 112, surahName: 'Al-Ikhlas');
+      await tester.pump();
+      expect(find.text('Al-Ikhlas'), findsOneWidget);
+      expect(find.text('Surah 112'), findsNothing);
+    });
+
+    testWidgets('rentang: ayat akhir tidak bisa lebih kecil dari ayat awal',
+        (tester) async {
+      final (c, _) = await pumpPlayer(tester);
+      c.setRepeat(const RepeatSettings(
+          mode: RepeatKind.range, count: 3, rangeStart: 2, rangeEnd: 2));
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Ulang ayat, aktif'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ayat akhir 2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ayat akhir 1'), findsNothing);
     });
   });
 }

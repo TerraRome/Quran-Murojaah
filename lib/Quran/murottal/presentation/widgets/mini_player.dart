@@ -59,7 +59,8 @@ class _MiniPlayerContent extends StatelessWidget {
     return switch (state) {
       MurottalPlaying(:final surahName) => surahName,
       MurottalPaused(:final surahName) => surahName,
-      MurottalLoading(:final surahNumber) => 'Surah $surahNumber',
+      MurottalLoading(:final surahNumber, :final surahName) =>
+        surahName.isEmpty ? 'Surah $surahNumber' : surahName,
       MurottalError() => '',
       MurottalIdle() => '',
     };
@@ -180,6 +181,7 @@ class _MiniPlayerContent extends StatelessWidget {
 
                   // Tombol close
                   IconButton(
+                    tooltip: 'Tutup pemutar',
                     onPressed: controller.stop,
                     icon: Icon(Icons.close,
                         color: QuranTokens.secondaryColor(dark), size: 20),
@@ -263,6 +265,7 @@ class _MiniPlayerContent extends StatelessWidget {
                   // Prev ayat (hanya mode per-ayat)
                   if (!isFullSurah)
                     IconButton(
+                      tooltip: 'Ayat sebelumnya',
                       onPressed: isLoading ? null : controller.prevAyat,
                       icon: Icon(Icons.skip_previous_rounded,
                           color: QuranTokens.inkColor(dark), size: 28),
@@ -280,6 +283,7 @@ class _MiniPlayerContent extends StatelessWidget {
                     )
                   else
                     IconButton(
+                      tooltip: isPlaying ? 'Jeda' : 'Putar',
                       onPressed: isPlaying ? controller.pause : controller.resume,
                       icon: Icon(
                         isPlaying
@@ -293,6 +297,7 @@ class _MiniPlayerContent extends StatelessWidget {
                   // Next ayat (hanya mode per-ayat)
                   if (!isFullSurah)
                     IconButton(
+                      tooltip: 'Ayat berikutnya',
                       onPressed: isLoading ? null : controller.nextAyat,
                       icon: Icon(Icons.skip_next_rounded,
                           color: QuranTokens.inkColor(dark), size: 28),

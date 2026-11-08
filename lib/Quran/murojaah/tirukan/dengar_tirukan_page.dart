@@ -23,6 +23,7 @@ class DengarTirukanPage extends StatefulWidget {
     required this.surahNumber,
     required this.controller,
     @visibleForTesting this.flowBuilder,
+    @visibleForTesting this.serviceBuilder,
   });
 
   final int surahNumber;
@@ -30,6 +31,10 @@ class DengarTirukanPage extends StatefulWidget {
 
   /// Pengganti alur produksi (test). Menerima surah yang sudah dimuat.
   final DengarTirukanFlow Function(Surah surah)? flowBuilder;
+
+  /// Pengganti mesin murojaah (test); bila diisi, `initialize()`-nya dijalankan
+  /// dan galatnya ditampilkan seperti produksi.
+  final ReciteMurojaahService Function(int surahNumber)? serviceBuilder;
 
   @override
   State<DengarTirukanPage> createState() => _DengarTirukanPageState();
@@ -68,43 +73,67 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     _surah = surah;
     unawaited(_loadLatin());
     final build = widget.flowBuilder;
-    if (build != null) {
+    final makeService = widget.serviceBuilder;
+    if (build != null && makeService == null) {
       _flow = build(surah);
     } else {
-      final service = _service = ReciteMurojaahService(
-        surahNumber: surah.number,
-      );
+      final service = _service =
+          makeService?.call(surah.number) ??
+          ReciteMurojaahService(surahNumber: surah.number);
       final session = _session = ReciteSessionController(engine: service);
-      final murottal = _murottal = MurottalController(
-        datasource: EquranRemoteDataSourceImpl(),
-        qariStore: QariStore.defaults(),
-      );
-      await murottal.prefsLoaded;
-      _flow = DengarTirukanFlow(
-        totalAyat: surah.totalVerses,
-        recognizer: ReciteAyatRecognizer(session: session, engine: service),
-        gap: () => Duration(seconds: murottal.repeat.value.gapSeconds),
-        stopAudio: murottal.stop,
-        playAyat: (ayat) => murottal.playOnce(
-          surahNumber: surah.number,
-          surahName: surah.transliteration,
-          ayatNumber: ayat,
+      if (build != null) {
+        _flow = build(surah);
+      } else {
+        final murottal = _murottal = MurottalController(
+          datasource: EquranRemoteDataSourceImpl(),
+          qariStore: QariStore.defaults(),
+        );
+        await murottal.prefsLoaded;
+        _flow = DengarTirukanFlow(
           totalAyat: surah.totalVerses,
-        ),
-      );
-      await service.initialize();
-      if (!mounted) return;
-      // Gagal siapkan mesin/unduh model: tampilkan sebabnya, jangan mulai alur
-      // (kalau tidak, pesan umum "audio atau mikrofon" yang muncul).
-      final err = service.errorMessage.value;
-      if (service.status.value == ReciteMurojaahStatus.error && err != null) {
-        setState(() {
-          _setupError = err;
-          _preparing = false;
-        });
-        return;
+          recognizer: ReciteAyatRecognizer(session: session, engine: service),
+          gap: () => Duration(seconds: murottal.repeat.value.gapSeconds),
+          stopAudio: murottal.stop,
+          playAyat: (ayat) => murottal.playOnce(
+            surahNumber: surah.number,
+            surahName: surah.transliteration,
+            ayatNumber: ayat,
+            totalAyat: surah.totalVerses,
+          ),
+        );
       }
+      if (!await _initService(service)) return;
     }
+    setState(() => _preparing = false);
+    unawaited(_flow!.start());
+  }
+
+  /// Siapkan mesin/unduh model. Gagal: tampilkan sebabnya, jangan mulai alur
+  /// (kalau tidak, pesan umum "audio atau mikrofon" yang muncul).
+  Future<bool> _initService(ReciteMurojaahService service) async {
+    await service.initialize();
+    if (!mounted) return false;
+    final err = service.errorMessage.value;
+    if (service.status.value == ReciteMurojaahStatus.error && err != null) {
+      setState(() {
+        _setupError = err;
+        _preparing = false;
+      });
+      return false;
+    }
+    return true;
+  }
+
+  /// Dipicu pengguna: service yang sama aman dipakai ulang (initialize()
+  /// mereset dirinya saat gagal; unduhan menghapus .tmp lama).
+  Future<void> _retrySetup() async {
+    final service = _service;
+    if (service == null) return;
+    setState(() {
+      _setupError = null;
+      _preparing = true;
+    });
+    if (!await _initService(service)) return;
     setState(() => _preparing = false);
     unawaited(_flow!.start());
   }
@@ -180,6 +209,16 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     );
   }
 
+  ButtonStyle _buttonStyle(bool dark) => FilledButton.styleFrom(
+    minimumSize: const Size.fromHeight(48),
+    backgroundColor: QuranTokens.brandColor(dark),
+    foregroundColor: QuranTokens.onPrimaryColor(dark),
+    textStyle: QuranTokens.poppins(
+      const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  );
+
   Widget _body(bool dark) {
     final flow = _flow;
     final surah = _surah;
@@ -189,7 +228,19 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(setupError, textAlign: TextAlign.center),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(setupError, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => unawaited(_retrySetup()),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Coba lagi'),
+                style: _buttonStyle(dark),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -292,20 +343,7 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
                             : () => unawaited(flow.start()),
                     icon: Icon(running ? Icons.stop : Icons.play_arrow),
                     label: Text(running ? 'Berhenti' : 'Mulai lagi'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      backgroundColor: QuranTokens.brandColor(dark),
-                      foregroundColor: QuranTokens.onPrimaryColor(dark),
-                      textStyle: QuranTokens.poppins(
-                        const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
+                    style: _buttonStyle(dark),
                   ),
                 ],
               ),

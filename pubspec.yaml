@@ -19,6 +19,7 @@ dependencies:
 
   # Networking
   dio: ^5.7.0
+  http: ^1.6.0 # klien unduh model ASR (BL-08-1)
 
   # Local Storage
   shared_preferences: ^2.3.4

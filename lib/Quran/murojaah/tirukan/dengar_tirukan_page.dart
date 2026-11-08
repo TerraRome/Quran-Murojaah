@@ -40,6 +40,7 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
   bool _notFound = false;
   DengarTirukanFlow? _flow;
   bool _preparing = true;
+  String? _setupError;
 
   ReciteMurojaahService? _service;
   ReciteSessionController? _session;
@@ -93,6 +94,16 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
       );
       await service.initialize();
       if (!mounted) return;
+      // Gagal siapkan mesin/unduh model: tampilkan sebabnya, jangan mulai alur
+      // (kalau tidak, pesan umum "audio atau mikrofon" yang muncul).
+      final err = service.errorMessage.value;
+      if (service.status.value == ReciteMurojaahStatus.error && err != null) {
+        setState(() {
+          _setupError = err;
+          _preparing = false;
+        });
+        return;
+      }
     }
     setState(() => _preparing = false);
     unawaited(_flow!.start());
@@ -173,8 +184,48 @@ class _DengarTirukanPageState extends State<DengarTirukanPage> {
     final flow = _flow;
     final surah = _surah;
     if (_notFound) return const Center(child: Text('Surah tidak ditemukan'));
+    final setupError = _setupError;
+    if (setupError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(setupError, textAlign: TextAlign.center),
+        ),
+      );
+    }
     if (_preparing || flow == null || surah == null) {
-      return const Center(child: CircularProgressIndicator());
+      final service = _service;
+      if (service == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      // Unduh model ±70 MB: tampilkan kemajuan, bukan spinner kosong.
+      return Center(
+        child: ListenableBuilder(
+          listenable: Listenable.merge([service.status, service.downloadProgress]),
+          builder: (context, _) {
+            final downloading =
+                service.status.value == ReciteMurojaahStatus.downloadingModel;
+            final p = service.downloadProgress.value;
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (downloading) ...[
+                    Text(
+                      'Mengunduh model suara… ${(p * 100).toInt()}%',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(value: p > 0 ? p : null),
+                  ] else
+                    const CircularProgressIndicator(),
+                ],
+              ),
+            );
+          },
+        ),
+      );
     }
     return ListenableBuilder(
       listenable: flow,

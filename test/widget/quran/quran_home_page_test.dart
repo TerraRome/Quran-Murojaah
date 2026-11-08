@@ -272,6 +272,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('bottom nav: label utuh tanpa overflow di 360dp skala 2.0 (BC-08-2)',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(homeApp(withSurahs: false));
+    await tester.pumpAndSettle();
+
+    final nav = find.byKey(const ValueKey('quran-bottom-nav'));
+    for (final label in ['Quran', 'Murojaah', 'Shalat', 'Doa', 'Bookmark']) {
+      final f = find.descendant(of: nav, matching: find.text(label));
+      expect(f, findsOneWidget, reason: label);
+      final box = find.ancestor(of: f, matching: find.byType(FittedBox));
+      expect(tester.getSize(box.first).width, lessThanOrEqualTo(360 / 5),
+          reason: label);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tab Bookmark: tanpa "Segera hadir", tampil petunjuk', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(homeApp());

@@ -781,17 +781,24 @@ class _QuranBottomNav extends StatelessWidget {
                                 : QuranTokens.secondaryColor(dark),
                           ),
                           const SizedBox(height: 2),
-                          // Label selalu tampil, 12sp (tsSurahMeta).
-                          Text(
-                            tabs[i].label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: QuranTokens.poppins(QuranTokens.tsSurahMeta)
-                                .copyWith(
+                          // Label selalu tampil utuh: mengecil bila sempit
+                          // saat huruf sistem besar (BC-08-2).
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                tabs[i].label,
+                                maxLines: 1,
+                                style:
+                                    QuranTokens.poppins(QuranTokens.tsSurahMeta)
+                                        .copyWith(
                                   color: i == selectedIndex
                                       ? QuranTokens.brandColor(dark)
                                       : QuranTokens.secondaryColor(dark),
                                 ),
+                              ),
+                            ),
                           ),
                         ],
                       ),

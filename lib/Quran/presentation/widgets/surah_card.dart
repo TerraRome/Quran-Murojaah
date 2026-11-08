@@ -35,7 +35,7 @@ class SurahCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           surah.revelationType.label,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2, // NF-1: boleh 2 baris saat huruf besar
                           style: QuranTokens.poppins(
                             QuranTokens.tsSurahMeta,
                           ).copyWith(color: secondary, letterSpacing: 0.5),
@@ -54,7 +54,7 @@ class SurahCard extends StatelessWidget {
                       Flexible(
                         child: Text(
                           '${surah.totalVerses} Ayat',
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2, // NF-1: boleh 2 baris saat huruf besar
                           style: QuranTokens.poppins(
                             QuranTokens.tsSurahMeta,
                           ).copyWith(color: secondary, letterSpacing: 0.5),
@@ -108,11 +108,19 @@ class _SurahNumberBadge extends StatelessWidget {
             height: 36,
             fit: BoxFit.cover,
           ),
-          Text(
-            '$number',
-            style: QuranTokens.poppins(
-              QuranTokens.tsVerseNumber,
-            ).copyWith(color: QuranTokens.inkColor(dark)),
+          // Mengecil agar 3 digit muat di dalam bingkai saat huruf besar.
+          SizedBox(
+            width: 26,
+            height: 26,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$number',
+                style: QuranTokens.poppins(
+                  QuranTokens.tsVerseNumber,
+                ).copyWith(color: QuranTokens.inkColor(dark)),
+              ),
+            ),
           ),
         ],
       ),

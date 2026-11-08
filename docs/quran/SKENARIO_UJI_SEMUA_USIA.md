@@ -135,7 +135,7 @@ Buka pengaturan **Ulang** dari mini player.
 | BL-04-2 | Cek pilihan jeda | Tersedia tanpa jeda, 2 detik, dan 5 detik | Lulus |
 | BL-04-3 | Saat sedang jeda antar ulangan, tekan pause, lalu play | Pemutaran lanjut ke ulangan berikutnya | Lulus (lihat catatan) |
 | BL-04-4 | Saat sedang jeda antar ulangan, tekan pause, ubah pengaturan ulang, lalu tekan play | **(diketahui)** bisa jadi tidak ada suara. Catat perilakunya; ini bug yang akan diperbaiki | Gagal: bug diketahui terbukti; ikon berubah ke pause tapi posisi diam di akhir ayat dan tidak ada suara (lihat catatan) |
-| BL-04-5 | Ubah mode ulang, tutup aplikasi, buka lagi | Pengaturan ulang kembali ke **Mati** (memang tidak disimpan) | Lewati: tutup dan buka aplikasi belum bisa diuji (lihat catatan) |
+| BL-04-5 | Ubah mode ulang, tutup aplikasi, buka lagi | Mode, jumlah, dan jeda ulang tetap seperti terakhir. Rentang ayat tidak disimpan: mode **Rentang** kembali ke **Mati** | Lewati: tutup dan buka aplikasi belum bisa diuji (lihat catatan) |
 | BL-04-6 👵🧒 | Minta penguji mengulang satu ayat 3 kali tanpa dibantu | Penguji menemukan tombol ulang dan berhasil (tugas uji kegunaan PRD §1.4) | Lewati: perlu penguji manusia |
 
 ### BL-05 dan BL-06: Daftar Juz
@@ -158,7 +158,7 @@ Buka pengaturan **Ulang** dari mini player.
 | BL-07-4 | Putar satu ayat terakhir saja (bukan surah penuh) dengan pengaturan aktif | Tidak lanjut ke surah berikutnya | Lulus |
 | BL-07-5 | Putar surah penuh An-Nas (surah terakhir) | Berhenti setelah ayat terakhir; tidak error | Lulus (lihat catatan: file unduhan tidak dipakai) |
 | BL-07-6 | Mode ulang aktif, lalu putar surah penuh | Mode ulang yang berlaku; tidak lanjut ke surah berikutnya | Lulus |
-| BL-07-7 | Saat lanjut otomatis berjalan, lihat layar | **(diketahui)** halaman tetap di surah lama, tidak ikut pindah. Catat apakah ini membingungkan | Sesuai yang diketahui; membingungkan (lihat catatan) |
+| BL-07-7 | Saat lanjut otomatis berjalan, lihat layar | Halaman ikut pindah ke surah yang sedang diputar dan menggulir ke ayatnya | Sesuai yang diketahui; membingungkan (lihat catatan) |
 
 ### BL-08: Dengar lalu Tirukan (wajib di HP asli)
 
@@ -271,3 +271,8 @@ Pasang versi lama dari commit `9531cc6` (sebelum fitur PRD ini), pakai beberapa 
 | NF-7-2 | Perbaikan, belum diuji ulang | Enam pesan teknis diganti kalimat biasa; detail hanya ke log | Claude | 2026-11-08 |
 | BC-08-2, NF-1 | Perbaikan, belum diuji ulang | Label menu bawah dan nomor surah mengecil agar utuh saat huruf besar; info baris surah boleh 2 baris. Widget test 360dp skala 2.0 lulus dengan font cadangan, belum dengan Poppins di HP | Claude | 2026-11-08 |
 | Catatan kecil | Perbaikan | Sapaan jadi "Assalamualaikum"; "Download" jadi "Unduh"; preview Pengaturan ikut pilihan latin/terjemahan dan memakai terjemahan Bismillah yang sama dengan halaman surah | Claude | 2026-11-08 |
+| BL-07-7 | Perbaikan, belum diuji ulang | Saat lanjut otomatis, halaman ikut pindah ke surah baru dan menggulir ke ayat yang diputar. Ekspektasi BL-07-7 diubah | Claude | 2026-11-08 |
+| BC-06-5 | Perbaikan, belum diuji ulang | Hapus dari tab Bookmark kini memunculkan snackbar **Ayat dihapus** dengan tombol **Batal**; Batal mengembalikan bookmark dengan waktu simpan aslinya | Claude | 2026-11-08 |
+| BL-08-1 | Perbaikan, belum diuji ulang | Bila persiapan Dengar lalu Tirukan gagal, muncul tombol **Coba lagi** | Claude | 2026-11-08 |
+| BL-04-5, BL-08-7 | Perbaikan, belum diuji ulang | Mode, jumlah, dan jeda ulang disimpan permanen, jadi jeda dari murottal terbawa ke Dengar lalu Tirukan. Rentang ayat tidak disimpan; mode Rentang dimuat sebagai Mati. Ekspektasi BL-04-5 diubah | Claude | 2026-11-08 |
+| BL-04-1 | Perbaikan, belum diuji ulang | Saat jeda antar ulangan, mini player menampilkan **Jeda… N** dengan lingkaran kecil, dan tombol putar jadi **Lewati jeda**. Label TalkBack "Jeda N detik sebelum ulangan berikutnya" belum dicek di HP. Selama jeda tombol Jeda tidak tampil; jeda bisa dihentikan dengan menutup pemutar | Claude | 2026-11-08 |

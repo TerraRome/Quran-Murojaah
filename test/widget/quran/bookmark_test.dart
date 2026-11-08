@@ -151,6 +151,62 @@ void main() {
     expect(find.text('Terjemahan ayat 1.'), findsNothing);
   });
 
+  // BC-03-3 / BC-06-4 / BL-05-2: ayat jauh + ayat panjang + font terbesar
+  // dulu berhenti di tengah jalan (satu viewport per percobaan, maks 60).
+  for (final ayat in [255, 282]) {
+    testWidgets('initialAyat $ayat di surah panjang, font Sangat Besar, '
+        'tampil di layar', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'quran_font_size_arabic': 44.0,
+        'quran_font_size_latin': 24.0,
+        'quran_font_size_translation': 26.0,
+      });
+      final longArabic = List.filled(
+        12,
+        'بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ',
+      ).join(' ');
+      Verse verse(int n) => Verse(
+        number: n,
+        numberInSurah: n,
+        arabic: n % 3 == 0 ? longArabic : 'بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ',
+        translation:
+            'Terjemahan ayat $n. ${'Kalimat panjang. ' * ((n % 7 + 1) * 4)}',
+      );
+      final controller = QuranController(
+        _FakeQuranRepository([
+          Surah(
+            number: 2,
+            name: 'البقرة',
+            transliteration: 'Al-Baqarah',
+            translation: 'Sapi Betina',
+            revelationType: RevelationType.medinan,
+            totalVerses: 286,
+            verses: [for (var i = 1; i <= 286; i++) verse(i)],
+          ),
+        ]),
+        const LastReadStore(),
+      );
+      await controller.load();
+      await tester.pumpWidget(
+        QuranThemeScope(
+          child: MaterialApp(
+            home: SurahDetailPage(
+              surahNumber: 2,
+              controller: controller,
+              initialAyat: ayat,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final target = find.textContaining('Terjemahan ayat $ayat.');
+      expect(target, findsOneWidget);
+      // Bukan sekadar terbangun di cache: harus di dalam layar.
+      final y = tester.getTopLeft(target).dy;
+      expect(y, inInclusiveRange(0, tester.view.physicalSize.height));
+    });
+  }
+
   group('BookmarkPage', () {
     Future<(BookmarkController, List<String>)> pumpPage(
       WidgetTester tester,

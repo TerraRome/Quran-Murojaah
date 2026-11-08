@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -213,8 +214,10 @@ class _SurahDetailPageState extends State<SurahDetailPage>
   }
 
   /// Scroll ke [ayat]. ListView.builder baru membangun item yang dekat
-  /// viewport, jadi bila kunci belum punya context, geser selangkah ke arah
-  /// ayat itu (berdasarkan ayat terbangun terdekat) lalu coba lagi.
+  /// viewport, jadi bila kunci belum punya context, lompat ke perkiraan posisi
+  /// ayat itu: posisi ayat terbangun terdekat + selisih ayat × tinggi rata-rata
+  /// ayat terbangun. Perkiraan diperbaiki tiap frame sampai ayat terbangun;
+  /// batas percobaan hanya jaring pengaman.
   void _scrollToAyat(int ayat, [int attempt = 0]) {
     if (!mounted || !_scrollController.hasClients) return;
     final ctx = _verseKeys[ayat - 1].currentContext;
@@ -227,14 +230,34 @@ class _SurahDetailPageState extends State<SurahDetailPage>
       );
       return;
     }
-    if (attempt >= 60) return;
-    final built = _verseKeys.indexWhere((k) => k.currentContext != null);
+    if (attempt >= 30) return;
     final pos = _scrollController.position;
-    final forward = built == -1 || built + 1 < ayat;
-    final step = pos.viewportDimension * (forward ? 1 : -1);
-    _scrollController.jumpTo(
-      (pos.pixels + step).clamp(0.0, pos.maxScrollExtent),
-    );
+    int? nearest;
+    var builtCount = 0;
+    var builtHeight = 0.0;
+    for (var i = 0; i < _verseKeys.length; i++) {
+      final box = _verseKeys[i].currentContext?.findRenderObject();
+      if (box is! RenderBox) continue;
+      builtCount++;
+      builtHeight += box.size.height;
+      if (nearest == null ||
+          (i - (ayat - 1)).abs() < (nearest - (ayat - 1)).abs()) {
+        nearest = i;
+      }
+    }
+    double target;
+    if (nearest == null) {
+      // Belum ada ayat terbangun: perkiraan kasar proporsional.
+      target = pos.maxScrollExtent * (ayat / _verseKeys.length);
+    } else {
+      final box =
+          _verseKeys[nearest].currentContext!.findRenderObject()! as RenderBox;
+      final nearestOffset = RenderAbstractViewport.of(
+        box,
+      ).getOffsetToReveal(box, 0).offset;
+      target = nearestOffset + (ayat - 1 - nearest) * builtHeight / builtCount;
+    }
+    _scrollController.jumpTo(target.clamp(0.0, pos.maxScrollExtent));
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollToAyat(ayat, attempt + 1),
     );

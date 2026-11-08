@@ -92,12 +92,10 @@ class _RepeatSheet extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
+                      // Pilihan akhir mulai dari ayat awal: akhir tak bisa < awal.
                       child: _picker('Ayat akhir', s.rangeEnd, (v) {
-                        controller.setRepeat(s.copyWith(
-                          rangeEnd: v,
-                          rangeStart: v < s.rangeStart ? v : s.rangeStart,
-                        ));
-                      }),
+                        controller.setRepeat(s.copyWith(rangeEnd: v));
+                      }, min: s.rangeStart),
                     ),
                   ]),
                 ],
@@ -174,7 +172,8 @@ class _RepeatSheet extends StatelessWidget {
     );
   }
 
-  Widget _picker(String label, int value, ValueChanged<int> onChanged) {
+  Widget _picker(String label, int value, ValueChanged<int> onChanged,
+      {int min = 1}) {
     return Semantics(
       label: label,
       child: Container(
@@ -187,10 +186,10 @@ class _RepeatSheet extends StatelessWidget {
         child: DropdownButtonHideUnderline(
           child: DropdownButton<int>(
             isExpanded: true,
-            value: value.clamp(1, totalAyat),
+            value: value.clamp(min, totalAyat),
             dropdownColor: QuranTokens.surface(dark),
             items: [
-              for (var i = 1; i <= totalAyat; i++)
+              for (var i = min; i <= totalAyat; i++)
                 DropdownMenuItem(
                   value: i,
                   child: Text(

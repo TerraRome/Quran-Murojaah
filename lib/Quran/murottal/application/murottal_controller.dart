@@ -34,8 +34,9 @@ class MurottalIdle extends MurottalState {
 }
 
 class MurottalLoading extends MurottalState {
-  const MurottalLoading({required this.surahNumber});
+  const MurottalLoading({required this.surahNumber, this.surahName = ''});
   final int surahNumber;
+  final String surahName;
 }
 
 class MurottalPlaying extends MurottalState {
@@ -178,11 +179,16 @@ class MurottalController extends ValueNotifier<MurottalState> {
 
   /// Ubah pengaturan ulang; hitungan ulangan dimulai dari awal.
   void setRepeat(RepeatSettings s) {
+    final inGap = _pending != null;
     _cancelGap();
     _sequencer
       ..settings = s
       ..reset();
     repeat.value = s;
+    // Jeda yang dibatalkan tadi satu-satunya penyambung ke ulangan berikutnya;
+    // tanpa ini player berhenti di ujung ayat. Bila sedang di-pause, resume()
+    // yang melanjutkan.
+    if (inGap && value is MurottalPlaying) _onCompleted();
   }
 
   Future<void> setAutoNextSurah(bool v) async {
@@ -292,6 +298,13 @@ class MurottalController extends ValueNotifier<MurottalState> {
     }
   }
 
+  /// Pesan error ramah untuk pengguna; detail teknis hanya ke log.
+  void _failLoad(Object e) {
+    debugPrint('Murottal: gagal memuat audio: $e');
+    value = const MurottalError(
+        'Gagal memuat audio. Periksa koneksi internet, lalu coba lagi.');
+  }
+
   /// Ulang ayat yang sama tanpa memuat ulang sumber audio.
   Future<void> _replay(MurottalPlaying current) async {
     try {
@@ -299,7 +312,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
       value = current.copyWith(position: Duration.zero);
       await _player.play();
     } catch (e) {
-      value = MurottalError('Gagal memuat audio: $e');
+      _failLoad(e);
     }
   }
 
@@ -377,7 +390,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
   }) async {
     _cancelGap();
     final qari = _qariStore.getSelectedQari();
-    value = MurottalLoading(surahNumber: surahNumber);
+    value = MurottalLoading(surahNumber: surahNumber, surahName: surahName);
 
     try {
       final audioModel = await _getAudioModel(surahNumber);
@@ -407,7 +420,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
     } on EquranApiException catch (e) {
       value = MurottalError(e.message);
     } catch (e) {
-      value = MurottalError('Gagal memuat audio: $e');
+      _failLoad(e);
     }
   }
 
@@ -441,7 +454,10 @@ class MurottalController extends ValueNotifier<MurottalState> {
       pending();
       return;
     }
-    await _player.play();
+    final atEnd = _player.processingState == ProcessingState.completed;
+    // Sumber yang sudah selesai tidak bisa di-play() lagi: tentukan langkah
+    // berikutnya dengan pengaturan ulang terbaru (jeda diubah saat di-pause).
+    if (!atEnd) await _player.play();
     value = MurottalPlaying(
       surahNumber: current.surahNumber,
       surahName: current.surahName,
@@ -452,6 +468,7 @@ class MurottalController extends ValueNotifier<MurottalState> {
       duration: current.duration,
       isFullSurah: current.isFullSurah,
     );
+    if (atEnd) _onCompleted();
   }
 
   /// Stop dan reset ke idle.

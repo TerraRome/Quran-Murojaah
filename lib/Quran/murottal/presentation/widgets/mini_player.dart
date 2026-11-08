@@ -189,7 +189,7 @@ class _MiniPlayerContent extends StatelessWidget {
                 ],
               ),
 
-              // Jeda antar ulangan (BL-04-1): hitung mundur menggantikan seek bar
+              // Jeda antar ulangan (BL-04-1): hitung mundur di atas seek bar
               ValueListenableBuilder<int?>(
                 valueListenable: controller.gapRemaining,
                 builder: (context, gap, _) {
@@ -197,7 +197,9 @@ class _MiniPlayerContent extends StatelessWidget {
                   return Semantics(
                     liveRegion: true,
                     excludeSemantics: true,
-                    label: 'Jeda $gap detik sebelum ulangan berikutnya',
+                    // Label tetap selama jeda supaya TalkBack membacakan sekali, bukan tiap detik.
+                    label:
+                        'Jeda ${controller.repeat.value.gapSeconds} detik sebelum ulangan berikutnya',
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
